@@ -1,0 +1,27 @@
+# /gif/mcp-server/Dockerfile
+# MCP server — Node.js 20 / TypeScript (ADR-019)
+# Development image. Bind mount overlays source at runtime.
+# For production: remove bind mount, bake source into image at build time.
+
+FROM node:20-alpine
+
+# Set working directory inside container
+WORKDIR /app
+
+# Install dependencies first — separate layer so Docker cache is preserved
+# when only source files change (not package.json)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy source — in development this is overlaid by bind mount at runtime.
+# Present here so the image is self-contained for future production builds.
+COPY . .
+
+# Compile TypeScript to JavaScript
+RUN npm run build
+
+# Expose MCP server port (ADR-019)
+EXPOSE 3100
+
+# Start compiled server
+CMD ["node", "dist/index.js"]
