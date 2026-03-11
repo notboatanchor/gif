@@ -4,14 +4,10 @@
 // GIF MCP server — entry point
 // HTTP/SSE transport. Listens on PORT (default 3100).
 //
-// Uses the low-level Server class from the MCP SDK rather than McpServer.
-// McpServer's higher-level tool() registration API triggers TS2589
-// (type instantiation too deep) in strict mode on this SDK version.
-// The low-level Server class has simpler generics and avoids the issue
-// while providing identical runtime behaviour.
-//
-// All tool calls pass through persona validation before execution.
-// Tool implementations added in Steps 4, 5, 6.
+// SSE transport session management:
+// - GET /sse     — client connects, receives session endpoint URL
+// - POST /message?sessionId=<id> — client posts tool calls to session
+// - GET /health  — Docker health check
 //
 // ADR-008: MCP server as the AI tool interface layer
 // ADR-009: Persona-based permissions as infrastructure
@@ -26,21 +22,25 @@ const sse_js_1 = require("@modelcontextprotocol/sdk/server/sse.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const http_1 = __importDefault(require("http"));
 const persona_js_1 = require("./persona.js");
+const web_search_js_1 = require("./tools/web_search.js");
 const PORT = parseInt(process.env.PORT || '3100');
 // ----------------------------------------------------------------------------
 // MCP server instance — low-level Server class
 // ----------------------------------------------------------------------------
 const server = new index_js_1.Server({ name: 'gif-mcp-server', version: '0.1.0' }, { capabilities: { tools: {} } });
 // ----------------------------------------------------------------------------
+// Active SSE transports — keyed by sessionId
+// Required to route POST /message?sessionId=<id> to the correct transport
+// ----------------------------------------------------------------------------
+const transports = new Map();
+// ----------------------------------------------------------------------------
 // Tool definitions
-// Returned to clients during tool discovery (ListTools request).
-// Schema is JSON Schema format — MCP SDK standard.
 // ----------------------------------------------------------------------------
 server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
     tools: [
         {
             name: 'persona_validate',
-            description: 'Validate a persona by ID. Returns persona details if valid, error if not. Used for testing persona validation directly.',
+            description: 'Validate a persona by ID. Returns persona details if valid, error if not.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -93,12 +93,9 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
 }));
 // ----------------------------------------------------------------------------
 // Tool call handler
-// All tool calls routed through a single handler.
-// Persona validation runs before any tool executes.
 // ----------------------------------------------------------------------------
 server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    // args may be undefined — guard before destructuring
     if (!args || typeof args !== 'object') {
         throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, 'Tool arguments are required');
     }
@@ -107,9 +104,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
         throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, 'persona_id is required for all tool calls');
     }
     switch (name) {
-        // ------------------------------------------------------------------------
-        // persona_validate — test utility
-        // ------------------------------------------------------------------------
         case 'persona_validate': {
             const result = await (0, persona_js_1.validatePersona)(persona_id);
             if (!result.valid) {
@@ -137,9 +131,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     }],
             };
         }
-        // ------------------------------------------------------------------------
-        // web_search — Step 4
-        // ------------------------------------------------------------------------
         case 'web_search': {
             const validation = await (0, persona_js_1.validatePersona)(persona_id);
             if (!validation.valid) {
@@ -148,15 +139,12 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     isError: true,
                 };
             }
-            // TODO: Step 4 — implement web_search tool handler
-            return {
-                content: [{ type: 'text', text: JSON.stringify({ status: 'not_implemented', tool: 'web_search' }) }],
-                isError: true,
-            };
+            return (0, web_search_js_1.executeWebSearch)({
+                persona_id,
+                query: args['query'],
+                max_results: args['max_results'] ?? 10,
+            }, validation.persona);
         }
-        // ------------------------------------------------------------------------
-        // db_read — Step 5
-        // ------------------------------------------------------------------------
         case 'db_read': {
             const validation = await (0, persona_js_1.validatePersona)(persona_id);
             if (!validation.valid) {
@@ -171,9 +159,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 isError: true,
             };
         }
-        // ------------------------------------------------------------------------
-        // db_write — Step 6
-        // ------------------------------------------------------------------------
         case 'db_write': {
             const validation = await (0, persona_js_1.validatePersona)(persona_id);
             if (!validation.valid) {
@@ -194,23 +179,46 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
 });
 // ----------------------------------------------------------------------------
 // HTTP server and SSE transport
-// Each SSE connection gets its own transport instance.
 // ----------------------------------------------------------------------------
 const httpServer = http_1.default.createServer(async (req, res) => {
     console.log(`[server] ${req.method} ${req.url}`);
-    // Health check — used by Docker and monitoring
+    // Health check
     if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', service: 'gif-mcp-server' }));
         return;
     }
-    // SSE endpoint — model connects here to receive events
+    // SSE endpoint — client connects here, receives session URL
     if (req.method === 'GET' && req.url === '/sse') {
         const transport = new sse_js_1.SSEServerTransport('/message', res);
+        // Store transport so POST handler can route to it by sessionId
+        transports.set(transport.sessionId, transport);
+        transport.onclose = () => {
+            transports.delete(transport.sessionId);
+            console.log(`[server] Session closed: ${transport.sessionId}`);
+        };
         await server.connect(transport);
+        console.log(`[server] Session opened: ${transport.sessionId}`);
         return;
     }
-    // Unrecognised route
+    // Message endpoint — client posts tool calls here with sessionId param
+    if (req.method === 'POST' && req.url?.startsWith('/message')) {
+        const url = new URL(req.url, `http://localhost:${PORT}`);
+        const sessionId = url.searchParams.get('sessionId');
+        if (!sessionId) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'sessionId query parameter is required' }));
+            return;
+        }
+        const transport = transports.get(sessionId);
+        if (!transport) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: `Session ${sessionId} not found` }));
+            return;
+        }
+        await transport.handlePostMessage(req, res);
+        return;
+    }
     res.writeHead(404);
     res.end();
 });
@@ -219,7 +227,6 @@ httpServer.listen(PORT, () => {
     console.log(`[server] Health: http://localhost:${PORT}/health`);
     console.log(`[server] SSE:    http://localhost:${PORT}/sse`);
 });
-// Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('[server] SIGTERM received — shutting down');
     httpServer.close(() => {
