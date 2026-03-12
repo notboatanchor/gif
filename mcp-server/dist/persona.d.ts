@@ -18,6 +18,7 @@ export interface Persona {
 export interface ScopeDefinition {
     permitted_sources?: string[];
     permitted_actions?: string[];
+    permitted_write_targets?: string[];
     synthesis_depth?: number;
     output_destinations?: string[];
     data_classification_ceiling?: string;
@@ -37,6 +38,7 @@ export type PersonaInvalidReason = 'NOT_FOUND' | 'NOT_ACTIVE' | 'EXPIRED' | 'NOT
 export declare function validatePersona(personaId: string): Promise<PersonaValidationResult>;
 export declare function logScopeViolation(params: {
     personaId: string;
+    sessionId: string;
     attemptedAction: string;
     toolName: string;
     context: Record<string, unknown>;

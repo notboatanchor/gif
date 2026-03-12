@@ -17,35 +17,32 @@ import pool from './db.js';
 // Types
 // ----------------------------------------------------------------------------
 
-// Mirrors the personas table columns exactly.
-// Nullable fields reflect the schema — do not assume presence in tool handlers.
 export interface Persona {
-  persona_id:                 string;
-  issuing_entity:             string;
-  purpose:                    string;
-  created_by:                 string;
-  scope_definition:           ScopeDefinition;
-  valid_from:                 Date;
-  valid_until:                Date | null;
-  parent_persona_id:          string | null;
-  max_delegation_depth:       number;
-  status:                     PersonaStatus;
+  persona_id:                  string;
+  issuing_entity:              string;
+  purpose:                     string;
+  created_by:                  string;
+  scope_definition:            ScopeDefinition;
+  valid_from:                  Date;
+  valid_until:                 Date | null;
+  parent_persona_id:           string | null;
+  max_delegation_depth:        number;
+  status:                      PersonaStatus;
   data_classification_ceiling: string | null;
-  combination_policy_ref:     string | null;
-  governance_review_status:   GovernanceReviewStatus;
-  created_at:                 Date;
-  updated_at:                 Date;
+  combination_policy_ref:      string | null;
+  governance_review_status:    GovernanceReviewStatus;
+  created_at:                  Date;
+  updated_at:                  Date;
 }
 
-// Scope definition stored as JSONB in Postgres.
-// Fields are optional at the type level — enforcement logic checks presence.
 export interface ScopeDefinition {
-  permitted_sources?:            string[];
-  permitted_actions?:            string[];
-  synthesis_depth?:              number;
-  output_destinations?:          string[];
-  data_classification_ceiling?:  string;
-  retention_policy?:             string;
+  permitted_sources?:           string[];
+  permitted_actions?:           string[];
+  permitted_write_targets?:     string[];
+  synthesis_depth?:             number;
+  output_destinations?:         string[];
+  data_classification_ceiling?: string;
+  retention_policy?:            string;
 }
 
 export type PersonaStatus =
@@ -61,7 +58,6 @@ export type GovernanceReviewStatus =
 
 // ----------------------------------------------------------------------------
 // Validation result
-// Always check .valid before accessing .persona.
 // ----------------------------------------------------------------------------
 
 export type PersonaValidationResult =
@@ -77,14 +73,12 @@ export type PersonaInvalidReason =
 
 // ----------------------------------------------------------------------------
 // validatePersona()
-// Primary entry point. Called by every tool handler before execution.
 // ----------------------------------------------------------------------------
 
 export async function validatePersona(
   personaId: string
 ): Promise<PersonaValidationResult> {
 
-  // Guard against obviously invalid input before hitting the database.
   if (!personaId || typeof personaId !== 'string' || personaId.trim() === '') {
     return {
       valid: false,
@@ -139,9 +133,7 @@ export async function validatePersona(
     };
   }
 
-  // Status check — must be active.
-  // Suspended, revoked, and expired are all distinct failure modes
-  // but all result in rejection at this layer.
+  // Status check
   if (persona.status !== 'active') {
     return {
       valid: false,
@@ -152,8 +144,7 @@ export async function validatePersona(
 
   const now = new Date();
 
-  // Temporal check — valid_from.
-  // Persona record exists but activation window has not started.
+  // Temporal check — valid_from
   if (persona.valid_from && persona.valid_from > now) {
     return {
       valid: false,
@@ -162,8 +153,7 @@ export async function validatePersona(
     };
   }
 
-  // Temporal check — valid_until.
-  // Null valid_until means no expiry declared — permitted by schema.
+  // Temporal check — valid_until
   if (persona.valid_until && persona.valid_until < now) {
     return {
       valid: false,
@@ -172,44 +162,51 @@ export async function validatePersona(
     };
   }
 
-  // All checks passed.
   return { valid: true, persona };
 }
 
 // ----------------------------------------------------------------------------
 // logScopeViolation()
-// Called by tool handlers when a valid persona attempts an action outside
-// its declared scope. Persona existence is already confirmed at this point.
-// Records the violation in scope_violations for audit purposes.
-// Does not throw — a logging failure must not mask the rejection response.
+// Records an out-of-scope attempt in the scope_violations table.
+// Schema: violation_id, persona_id, session_id, attempted_action,
+//         attempted_tool, blocked_at, blocked, context_snapshot,
+//         available_but_unused, occurred_at
+//
+// Does not throw — logging failure must not mask the rejection response.
 // ----------------------------------------------------------------------------
 
 export async function logScopeViolation(params: {
   personaId:       string;
+  sessionId:       string;
   attemptedAction: string;
   toolName:        string;
   context:         Record<string, unknown>;
 }): Promise<void> {
 
-  const { personaId, attemptedAction, toolName, context } = params;
+  const { personaId, sessionId, attemptedAction, toolName, context } = params;
 
   try {
     await pool.query(
       `INSERT INTO scope_violations (
          persona_id,
+         session_id,
          attempted_action,
+         attempted_tool,
          blocked_at,
+         blocked,
          context_snapshot
-       ) VALUES ($1, $2, now(), $3)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         personaId,
-        `${toolName}:${attemptedAction}`,
+        sessionId,
+        attemptedAction,
+        toolName,
+        new Date().toISOString(),
+        true,
         JSON.stringify(context),
       ]
     );
   } catch (err) {
-    // Log but do not throw — violation logging failure must not prevent
-    // the rejection response from reaching the caller.
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error(`[persona] Failed to log scope violation for persona ${personaId}:`, message);
   }

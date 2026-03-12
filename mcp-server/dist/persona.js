@@ -20,10 +20,8 @@ exports.logScopeViolation = logScopeViolation;
 const db_js_1 = __importDefault(require("./db.js"));
 // ----------------------------------------------------------------------------
 // validatePersona()
-// Primary entry point. Called by every tool handler before execution.
 // ----------------------------------------------------------------------------
 async function validatePersona(personaId) {
-    // Guard against obviously invalid input before hitting the database.
     if (!personaId || typeof personaId !== 'string' || personaId.trim() === '') {
         return {
             valid: false,
@@ -70,9 +68,7 @@ async function validatePersona(personaId) {
             message: `Database error during persona validation: ${message}`,
         };
     }
-    // Status check — must be active.
-    // Suspended, revoked, and expired are all distinct failure modes
-    // but all result in rejection at this layer.
+    // Status check
     if (persona.status !== 'active') {
         return {
             valid: false,
@@ -81,8 +77,7 @@ async function validatePersona(personaId) {
         };
     }
     const now = new Date();
-    // Temporal check — valid_from.
-    // Persona record exists but activation window has not started.
+    // Temporal check — valid_from
     if (persona.valid_from && persona.valid_from > now) {
         return {
             valid: false,
@@ -90,8 +85,7 @@ async function validatePersona(personaId) {
             message: `Persona ${personaId} is not yet valid (valid_from: ${persona.valid_from.toISOString()})`,
         };
     }
-    // Temporal check — valid_until.
-    // Null valid_until means no expiry declared — permitted by schema.
+    // Temporal check — valid_until
     if (persona.valid_until && persona.valid_until < now) {
         return {
             valid: false,
@@ -99,33 +93,39 @@ async function validatePersona(personaId) {
             message: `Persona ${personaId} has expired (valid_until: ${persona.valid_until.toISOString()})`,
         };
     }
-    // All checks passed.
     return { valid: true, persona };
 }
 // ----------------------------------------------------------------------------
 // logScopeViolation()
-// Called by tool handlers when a valid persona attempts an action outside
-// its declared scope. Persona existence is already confirmed at this point.
-// Records the violation in scope_violations for audit purposes.
-// Does not throw — a logging failure must not mask the rejection response.
+// Records an out-of-scope attempt in the scope_violations table.
+// Schema: violation_id, persona_id, session_id, attempted_action,
+//         attempted_tool, blocked_at, blocked, context_snapshot,
+//         available_but_unused, occurred_at
+//
+// Does not throw — logging failure must not mask the rejection response.
 // ----------------------------------------------------------------------------
 async function logScopeViolation(params) {
-    const { personaId, attemptedAction, toolName, context } = params;
+    const { personaId, sessionId, attemptedAction, toolName, context } = params;
     try {
         await db_js_1.default.query(`INSERT INTO scope_violations (
          persona_id,
+         session_id,
          attempted_action,
+         attempted_tool,
          blocked_at,
+         blocked,
          context_snapshot
-       ) VALUES ($1, $2, now(), $3)`, [
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [
             personaId,
-            `${toolName}:${attemptedAction}`,
+            sessionId,
+            attemptedAction,
+            toolName,
+            new Date().toISOString(),
+            true,
             JSON.stringify(context),
         ]);
     }
     catch (err) {
-        // Log but do not throw — violation logging failure must not prevent
-        // the rejection response from reaching the caller.
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona] Failed to log scope violation for persona ${personaId}:`, message);
     }

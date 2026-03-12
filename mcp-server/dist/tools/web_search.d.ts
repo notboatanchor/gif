@@ -17,7 +17,7 @@ export interface WebSearchResponse {
     number_of_results: number;
     results: SearchResult[];
 }
-export declare function executeWebSearch(args: WebSearchArgs, persona: Persona): Promise<{
+export declare function executeWebSearch(args: WebSearchArgs, persona: Persona, sessionId: string): Promise<{
     content: Array<{
         type: 'text';
         text: string;
