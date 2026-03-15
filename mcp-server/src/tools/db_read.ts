@@ -65,18 +65,14 @@ function checkDbReadScope(
 
   const scope = persona.scope_definition;
 
-  // Check permitted_actions
-  if (scope.permitted_actions && scope.permitted_actions.length > 0) {
-    if (!scope.permitted_actions.includes('read')) {
-      return `Persona ${persona.persona_id} does not have 'read' in permitted_actions`;
-    }
+  // Fail-closed: absent or empty permitted_actions is a scope violation, not a pass.
+  if (!scope.permitted_actions || !scope.permitted_actions.includes('read')) {
+    return `Persona ${persona.persona_id} does not have 'read' in permitted_actions`;
   }
 
-  // Check permitted_sources — if defined, table must be listed
-  if (scope.permitted_sources && scope.permitted_sources.length > 0) {
-    if (!scope.permitted_sources.includes(table)) {
-      return `Persona ${persona.persona_id} does not have '${table}' in permitted_sources`;
-    }
+  // Fail-closed: absent or empty permitted_sources is a scope violation, not a pass.
+  if (!scope.permitted_sources || !scope.permitted_sources.includes(table)) {
+    return `Persona ${persona.persona_id} does not have '${table}' in permitted_sources`;
   }
 
   return null;

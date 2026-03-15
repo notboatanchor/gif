@@ -20,15 +20,13 @@ const SEARXNG_URL = process.env.SEARXNG_URL || 'http://searxng:8080';
 // ----------------------------------------------------------------------------
 function checkWebSearchScope(persona) {
     const scope = persona.scope_definition;
-    if (scope.permitted_actions && scope.permitted_actions.length > 0) {
-        if (!scope.permitted_actions.includes('search')) {
-            return `Persona ${persona.persona_id} does not have 'search' in permitted_actions`;
-        }
+    // Fail-closed: absent or empty permitted_actions is a scope violation, not a pass.
+    if (!scope.permitted_actions || !scope.permitted_actions.includes('search')) {
+        return `Persona ${persona.persona_id} does not have 'search' in permitted_actions`;
     }
-    if (scope.permitted_sources && scope.permitted_sources.length > 0) {
-        if (!scope.permitted_sources.includes('searxng')) {
-            return `Persona ${persona.persona_id} does not have 'searxng' in permitted_sources`;
-        }
+    // Fail-closed: absent or empty permitted_sources is a scope violation, not a pass.
+    if (!scope.permitted_sources || !scope.permitted_sources.includes('searxng')) {
+        return `Persona ${persona.persona_id} does not have 'searxng' in permitted_sources`;
     }
     return null;
 }

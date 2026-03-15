@@ -56,17 +56,14 @@ function checkDbWriteScope(
 
   const scope = persona.scope_definition;
 
-  if (scope.permitted_actions && scope.permitted_actions.length > 0) {
-    if (!scope.permitted_actions.includes('write')) {
-      return `Persona ${persona.persona_id} does not have 'write' in permitted_actions`;
-    }
+  // Fail-closed: absent or empty permitted_actions is a scope violation, not a pass.
+  if (!scope.permitted_actions || !scope.permitted_actions.includes('write')) {
+    return `Persona ${persona.persona_id} does not have 'write' in permitted_actions`;
   }
 
-  // output_destinations — if defined, table must be listed
-  if (scope.output_destinations && scope.output_destinations.length > 0) {
-    if (!scope.output_destinations.includes(table)) {
-      return `Persona ${persona.persona_id} does not have '${table}' in output_destinations`;
-    }
+  // Fail-closed: absent or empty output_destinations is a scope violation, not a pass.
+  if (!scope.output_destinations || !scope.output_destinations.includes(table)) {
+    return `Persona ${persona.persona_id} does not have '${table}' in output_destinations`;
   }
 
   return null;
