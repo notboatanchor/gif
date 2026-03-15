@@ -12,7 +12,7 @@ console.log('[test] Calling web_search...');
 const searchResult = await client.callTool({
   name: 'web_search',
   arguments: {
-    persona_id: '3006a265-c983-4364-ba5d-e68869988c75',
+    persona_id: 'd5465a85-e04b-48ab-a8ac-ba5c6904ca2e',
     query: 'federal contracting news',
     max_results: 3,
   },
@@ -24,7 +24,7 @@ console.log('[test] Calling db_read...');
 const dbResult = await client.callTool({
   name: 'db_read',
   arguments: {
-    persona_id: '3006a265-c983-4364-ba5d-e68869988c75',
+    persona_id: 'd5465a85-e04b-48ab-a8ac-ba5c6904ca2e',
     table: 'personas',
     limit: 3,
   },
