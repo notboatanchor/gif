@@ -36,6 +36,8 @@ import { createSession, closeSession, logAuditEvent } from './session.js';
 import { executeWebSearch } from './tools/web_search.js';
 import { executeDbRead } from './tools/db_read.js';
 import { executeDbWrite } from './tools/db_write.js';
+import { executePersonaCreate } from './tools/persona_create.js';
+import { executePersonaRevoke } from './tools/persona_revoke.js';
 
 const PORT = parseInt(process.env.PORT || '3100');
 
@@ -109,6 +111,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           record:     { type: 'string', description: 'JSON string of the record to insert e.g. {"key":"value"}' },
         },
         required: ['persona_id', 'table', 'record'],
+      },
+    },
+    {
+      name: 'persona_create',
+      description: 'Create a new persona in the GIF registry. Issuing persona must have manage_personas in permitted_actions.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          persona_id:           { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
+          issuing_entity:       { type: 'string', minLength: 1, description: 'Name of the entity issuing the persona' },
+          purpose:              { type: 'string', minLength: 1, description: 'Human-readable declaration of business function' },
+          created_by:           { type: 'string', minLength: 1, description: 'Identity of the actor creating the persona' },
+          scope_definition:     { type: 'string', description: 'JSON string of scope: permitted_sources, permitted_actions, output_destinations, retention_policy' },
+          valid_until:          { type: 'string', description: 'ISO 8601 datetime when persona expires' },
+          valid_from:           { type: 'string', description: 'ISO 8601 datetime when persona becomes valid (defaults to now)' },
+          max_delegation_depth: { type: 'number', minimum: 0, default: 0, description: 'Maximum delegation hops allowed (0 = no delegation)' },
+          parent_persona_id:    { type: 'string', format: 'uuid', description: 'UUID of parent persona for delegated scope (optional)' },
+        },
+        required: ['persona_id', 'issuing_entity', 'purpose', 'created_by', 'scope_definition', 'valid_until'],
+      },
+    },
+    {
+      name: 'persona_revoke',
+      description: 'Revoke a persona immediately. Issuing persona must have manage_personas in permitted_actions.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          persona_id:        { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
+          target_persona_id: { type: 'string', format: 'uuid', description: 'UUID of the persona to revoke' },
+          reason:            { type: 'string', minLength: 1, description: 'Reason for revocation — recorded in revocation_log' },
+          revoked_by:        { type: 'string', minLength: 1, description: 'Identity of the actor initiating the revocation' },
+        },
+        required: ['persona_id', 'target_persona_id', 'reason', 'revoked_by'],
       },
     },
   ],
@@ -225,18 +260,71 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         break;
 
+      case 'persona_create':
+        result = await executePersonaCreate(
+          {
+            persona_id,
+            issuing_entity:       args['issuing_entity'] as string,
+            purpose:              args['purpose'] as string,
+            created_by:           args['created_by'] as string,
+            scope_definition:     args['scope_definition'] as string,
+            valid_until:          args['valid_until'] as string,
+            valid_from:           args['valid_from'] as string | undefined,
+            max_delegation_depth: args['max_delegation_depth'] as number | undefined,
+            parent_persona_id:    args['parent_persona_id'] as string | undefined,
+          },
+          validation.persona,
+          sessionId
+        );
+        break;
+
+      case 'persona_revoke':
+        result = await executePersonaRevoke(
+          {
+            persona_id,
+            target_persona_id: args['target_persona_id'] as string,
+            reason:            args['reason'] as string,
+            revoked_by:        args['revoked_by'] as string,
+          },
+          validation.persona,
+          sessionId
+        );
+        break;
+
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
 
   } finally {
-    // Log audit event and close session regardless of outcome
+    // Determine event type and source_ref for persona lifecycle events.
+    // persona_create and persona_revoke are first-class audit events —
+    // event_type reflects the lifecycle action, not the generic 'tool_call'.
+    // source_ref captures the new or target persona_id for reconstruction.
+    let eventType = 'tool_call';
+    let sourceRef: string | undefined;
+
+    if (name === 'persona_create' || name === 'persona_revoke') {
+      eventType = name;
+      if (result && !result.isError) {
+        try {
+          const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+          sourceRef = (
+            parsed['persona_id'] as string | undefined ??
+            parsed['target_persona_id'] as string | undefined
+          );
+        } catch {
+          // sourceRef stays undefined — non-fatal
+        }
+      }
+    }
+
     await logAuditEvent({
       personaId:       persona_id,
       sessionId,
-      eventType:       'tool_call',
+      eventType,
       toolName:        name,
       outcome:         result === undefined || result.isError ? 'error' : 'success',
+      sourceRef,
       purposeDeclared: validation.persona.purpose,
     });
     await closeSession(sessionId);

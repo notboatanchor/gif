@@ -87,6 +87,7 @@ export async function logAuditEvent(params: {
   eventType:        string;
   toolName:         string;
   outcome:          string;
+  sourceRef?:       string;   // resource acted on: table name, URL, or persona_id for lifecycle events
   sourcesActed?:    string[];
   flagged?:         boolean;
   purposeDeclared?: string;   // copied from persona.purpose at call time (ADR-017)
@@ -98,6 +99,7 @@ export async function logAuditEvent(params: {
     eventType,
     toolName,
     outcome,
+    sourceRef,
     sourcesActed = [],
     flagged = false,
     purposeDeclared,
@@ -111,16 +113,18 @@ export async function logAuditEvent(params: {
          event_type,
          tool_name,
          outcome,
+         source_ref,
          sources_touched,
          flagged,
          purpose_declared
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         personaId,
         sessionId,
         eventType,
         toolName,
         outcome,
+        sourceRef ?? null,
         JSON.stringify(sourcesActed),
         flagged,
         purposeDeclared ?? null,

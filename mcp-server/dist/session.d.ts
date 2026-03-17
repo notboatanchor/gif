@@ -16,6 +16,7 @@ export declare function logAuditEvent(params: {
     eventType: string;
     toolName: string;
     outcome: string;
+    sourceRef?: string;
     sourcesActed?: string[];
     flagged?: boolean;
     purposeDeclared?: string;

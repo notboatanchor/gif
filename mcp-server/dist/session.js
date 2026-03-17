@@ -60,7 +60,7 @@ async function closeSession(sessionId) {
 // Does not throw — audit logging failure must not mask the tool response.
 // ----------------------------------------------------------------------------
 async function logAuditEvent(params) {
-    const { personaId, sessionId, eventType, toolName, outcome, sourcesActed = [], flagged = false, purposeDeclared, } = params;
+    const { personaId, sessionId, eventType, toolName, outcome, sourceRef, sourcesActed = [], flagged = false, purposeDeclared, } = params;
     try {
         await db_js_1.default.query(`INSERT INTO audit_events (
          persona_id,
@@ -68,15 +68,17 @@ async function logAuditEvent(params) {
          event_type,
          tool_name,
          outcome,
+         source_ref,
          sources_touched,
          flagged,
          purpose_declared
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [
             personaId,
             sessionId,
             eventType,
             toolName,
             outcome,
+            sourceRef ?? null,
             JSON.stringify(sourcesActed),
             flagged,
             purposeDeclared ?? null,
