@@ -26,6 +26,7 @@ export interface ScopeDefinition {
 }
 export type PersonaStatus = 'active' | 'suspended' | 'revoked' | 'expired';
 export type GovernanceReviewStatus = 'auto_approved' | 'pending' | 'approved';
+export type EnforcementLayer = 'mcp_validation' | 'synthesis_gate' | 'export_gate';
 export type PersonaValidationResult = {
     valid: true;
     persona: Persona;
@@ -41,6 +42,7 @@ export declare function logScopeViolation(params: {
     sessionId: string;
     attemptedAction: string;
     toolName: string;
+    blockedAt: EnforcementLayer;
     context: Record<string, unknown>;
 }): Promise<void>;
 //# sourceMappingURL=persona.d.ts.map

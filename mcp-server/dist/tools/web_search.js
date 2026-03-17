@@ -43,6 +43,7 @@ async function executeWebSearch(args, persona, sessionId) {
             sessionId,
             attemptedAction: 'search',
             toolName: 'web_search',
+            blockedAt: 'mcp_validation',
             context: { query: args.query, max_results: args.max_results },
         });
         return {

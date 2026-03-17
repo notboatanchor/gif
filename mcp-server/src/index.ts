@@ -172,10 +172,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  // Create session — captures invocation context for audit trail
+  // Create session — captures invocation context and persona state snapshot
+  // for point-in-time reconstruction (Sprint 3)
   const sessionId = await createSession({
     personaId:         persona_id,
-    invocationContext: { tool: name, arguments: args },
+    invocationContext: {
+      tool:              name,
+      arguments:         args,
+      persona_purpose:   validation.persona.purpose,
+      persona_valid_until: validation.persona.valid_until,
+    },
   });
 
   let result: { content: Array<{ type: 'text'; text: string }>; isError?: boolean } | undefined;
@@ -226,11 +232,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } finally {
     // Log audit event and close session regardless of outcome
     await logAuditEvent({
-      personaId: persona_id,
+      personaId:       persona_id,
       sessionId,
-      eventType: 'tool_call',
-      toolName:  name,
-      outcome:   result === undefined || result.isError ? 'error' : 'success',
+      eventType:       'tool_call',
+      toolName:        name,
+      outcome:         result === undefined || result.isError ? 'error' : 'success',
+      purposeDeclared: validation.persona.purpose,
     });
     await closeSession(sessionId);
   }

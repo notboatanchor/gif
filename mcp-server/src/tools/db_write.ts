@@ -16,7 +16,7 @@
 // =============================================================================
 
 import pool from '../db.js';
-import { Persona, logScopeViolation } from '../persona.js';
+import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
 
 // ----------------------------------------------------------------------------
 // Table allowlist
@@ -99,6 +99,7 @@ export async function executeDbWrite(
       sessionId,
       attemptedAction: 'write',
       toolName:        'db_write',
+      blockedAt:       'mcp_validation' as EnforcementLayer,
       context:         { table, record },
     });
     return {

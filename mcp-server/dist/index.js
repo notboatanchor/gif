@@ -151,10 +151,16 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             isError: true,
         };
     }
-    // Create session — captures invocation context for audit trail
+    // Create session — captures invocation context and persona state snapshot
+    // for point-in-time reconstruction (Sprint 3)
     const sessionId = await (0, session_js_1.createSession)({
         personaId: persona_id,
-        invocationContext: { tool: name, arguments: args },
+        invocationContext: {
+            tool: name,
+            arguments: args,
+            persona_purpose: validation.persona.purpose,
+            persona_valid_until: validation.persona.valid_until,
+        },
     });
     let result;
     try {
@@ -193,6 +199,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             eventType: 'tool_call',
             toolName: name,
             outcome: result === undefined || result.isError ? 'error' : 'success',
+            purposeDeclared: validation.persona.purpose,
         });
         await (0, session_js_1.closeSession)(sessionId);
     }

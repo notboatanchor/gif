@@ -11,7 +11,7 @@
 // ADR-009: Persona-based permissions as infrastructure
 // =============================================================================
 
-import { Persona, logScopeViolation } from '../persona.js';
+import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
 
 const SEARXNG_URL = process.env.SEARXNG_URL || 'http://searxng:8080';
 
@@ -94,6 +94,7 @@ export async function executeWebSearch(
       sessionId,
       attemptedAction: 'search',
       toolName:        'web_search',
+      blockedAt:       'mcp_validation' as EnforcementLayer,
       context:         { query: args.query, max_results: args.max_results },
     });
     return {

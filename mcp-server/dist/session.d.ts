@@ -18,5 +18,6 @@ export declare function logAuditEvent(params: {
     outcome: string;
     sourcesActed?: string[];
     flagged?: boolean;
+    purposeDeclared?: string;
 }): Promise<void>;
 //# sourceMappingURL=session.d.ts.map

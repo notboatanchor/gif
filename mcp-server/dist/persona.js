@@ -105,7 +105,7 @@ async function validatePersona(personaId) {
 // Does not throw — logging failure must not mask the rejection response.
 // ----------------------------------------------------------------------------
 async function logScopeViolation(params) {
-    const { personaId, sessionId, attemptedAction, toolName, context } = params;
+    const { personaId, sessionId, attemptedAction, toolName, blockedAt, context } = params;
     try {
         await db_js_1.default.query(`INSERT INTO scope_violations (
          persona_id,
@@ -120,7 +120,7 @@ async function logScopeViolation(params) {
             sessionId,
             attemptedAction,
             toolName,
-            new Date().toISOString(),
+            blockedAt,
             true,
             JSON.stringify(context),
         ]);

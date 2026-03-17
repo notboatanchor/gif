@@ -44,6 +44,7 @@ const ALLOWED_READ_TABLES = new Set([
     'gap_analysis',
     'synthesis_outputs',
     'tool_registry',
+    'user_persona_assignments',
 ]);
 // ----------------------------------------------------------------------------
 // Scope validation
@@ -82,6 +83,7 @@ async function executeDbRead(args, persona, sessionId) {
             sessionId,
             attemptedAction: 'read',
             toolName: 'db_read',
+            blockedAt: 'mcp_validation',
             context: { table, filters, limit },
         });
         return {

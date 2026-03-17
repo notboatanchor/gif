@@ -82,13 +82,14 @@ export async function closeSession(sessionId: string): Promise<void> {
 // ----------------------------------------------------------------------------
 
 export async function logAuditEvent(params: {
-  personaId:     string;
-  sessionId:     string;
-  eventType:     string;
-  toolName:      string;
-  outcome:       string;
-  sourcesActed?: string[];
-  flagged?:      boolean;
+  personaId:        string;
+  sessionId:        string;
+  eventType:        string;
+  toolName:         string;
+  outcome:          string;
+  sourcesActed?:    string[];
+  flagged?:         boolean;
+  purposeDeclared?: string;   // copied from persona.purpose at call time (ADR-017)
 }): Promise<void> {
 
   const {
@@ -99,6 +100,7 @@ export async function logAuditEvent(params: {
     outcome,
     sourcesActed = [],
     flagged = false,
+    purposeDeclared,
   } = params;
 
   try {
@@ -110,8 +112,9 @@ export async function logAuditEvent(params: {
          tool_name,
          outcome,
          sources_touched,
-         flagged
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         flagged,
+         purpose_declared
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         personaId,
         sessionId,
@@ -120,6 +123,7 @@ export async function logAuditEvent(params: {
         outcome,
         JSON.stringify(sourcesActed),
         flagged,
+        purposeDeclared ?? null,
       ]
     );
   } catch (err) {

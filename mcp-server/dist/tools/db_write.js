@@ -74,6 +74,7 @@ async function executeDbWrite(args, persona, sessionId) {
             sessionId,
             attemptedAction: 'write',
             toolName: 'db_write',
+            blockedAt: 'mcp_validation',
             context: { table, record },
         });
         return {

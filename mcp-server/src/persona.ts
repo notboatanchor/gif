@@ -56,6 +56,15 @@ export type GovernanceReviewStatus =
   | 'pending'
   | 'approved';
 
+// The layer at which a scope violation was caught.
+// mcp_validation — caught by MCP server before tool execution (current layer)
+// synthesis_gate — caught at synthesis step (future)
+// export_gate    — caught at export step (future)
+export type EnforcementLayer =
+  | 'mcp_validation'
+  | 'synthesis_gate'
+  | 'export_gate';
+
 // ----------------------------------------------------------------------------
 // Validation result
 // ----------------------------------------------------------------------------
@@ -180,10 +189,11 @@ export async function logScopeViolation(params: {
   sessionId:       string;
   attemptedAction: string;
   toolName:        string;
+  blockedAt:       EnforcementLayer;
   context:         Record<string, unknown>;
 }): Promise<void> {
 
-  const { personaId, sessionId, attemptedAction, toolName, context } = params;
+  const { personaId, sessionId, attemptedAction, toolName, blockedAt, context } = params;
 
   try {
     await pool.query(
@@ -201,7 +211,7 @@ export async function logScopeViolation(params: {
         sessionId,
         attemptedAction,
         toolName,
-        new Date().toISOString(),
+        blockedAt,
         true,
         JSON.stringify(context),
       ]

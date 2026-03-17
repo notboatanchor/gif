@@ -15,7 +15,7 @@
 // =============================================================================
 
 import pool from '../db.js';
-import { Persona, logScopeViolation } from '../persona.js';
+import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
 
 // ----------------------------------------------------------------------------
 // Table allowlist
@@ -41,6 +41,7 @@ const ALLOWED_READ_TABLES = new Set([
   'gap_analysis',
   'synthesis_outputs',
   'tool_registry',
+  'user_persona_assignments',
 ]);
 
 // ----------------------------------------------------------------------------
@@ -108,6 +109,7 @@ export async function executeDbRead(
       sessionId,
       attemptedAction: 'read',
       toolName:        'db_read',
+      blockedAt:       'mcp_validation' as EnforcementLayer,
       context:         { table, filters, limit },
     });
     return {
