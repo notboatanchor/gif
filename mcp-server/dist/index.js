@@ -4,23 +4,22 @@
 // GIF MCP server — entry point
 // HTTP/SSE transport. Listens on PORT (default 3100).
 //
-// Tool implementations:
-//   Step 3: persona_validate
-//   Step 4: web_search
-//   Step 5: db_read
-//   Step 6: db_write
-//
-// Session lifecycle per tool call:
-//   1. Validate persona
-//   2. Create session record
-//   3. Execute tool (with sessionId for audit/violation logging)
+// Enforcement engine responsibilities:
+//   1. Validate persona (existence, active status, temporal bounds)
+//   2. Create session record (unless tool.skipSession is true)
+//   3. Dispatch to tool handler via TOOL_REGISTRY
 //   4. Log audit event
 //   5. Close session
+//
+// The enforcement engine has no knowledge of which tools exist or what they do.
+// Tools are registered in src/tools/registry.ts (ADR-026, ADR-027).
 //
 // ADR-008: MCP server as the AI tool interface layer
 // ADR-009: Persona-based permissions as infrastructure
 // ADR-017: Governance audit schema stubs
 // ADR-019: MCP server language, runtime, and port assignment
+// ADR-026: MCP server deployment topology
+// ADR-027: GIF packaging model and extraction progression
 // =============================================================================
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -32,11 +31,7 @@ const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const http_1 = __importDefault(require("http"));
 const persona_js_1 = require("./persona.js");
 const session_js_1 = require("./session.js");
-const web_search_js_1 = require("./tools/web_search.js");
-const db_read_js_1 = require("./tools/db_read.js");
-const db_write_js_1 = require("./tools/db_write.js");
-const persona_create_js_1 = require("./tools/persona_create.js");
-const persona_revoke_js_1 = require("./tools/persona_revoke.js");
+const registry_js_1 = require("./tools/registry.js");
 const PORT = parseInt(process.env.PORT || '3100');
 // ----------------------------------------------------------------------------
 // MCP server instance
@@ -47,98 +42,13 @@ const server = new index_js_1.Server({ name: 'gif-mcp-server', version: '0.1.0' 
 // ----------------------------------------------------------------------------
 const transports = new Map();
 // ----------------------------------------------------------------------------
-// Tool definitions
+// ListTools — derived from registry, no hardcoded definitions
 // ----------------------------------------------------------------------------
 server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
-    tools: [
-        {
-            name: 'persona_validate',
-            description: 'Validate a persona by ID. Returns persona details if valid, error if not.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    persona_id: { type: 'string', format: 'uuid', description: 'UUID of the persona to validate' },
-                },
-                required: ['persona_id'],
-            },
-        },
-        {
-            name: 'web_search',
-            description: 'Search the web via SearXNG. Persona scope is validated before execution.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
-                    query: { type: 'string', minLength: 1, description: 'Search query string' },
-                    max_results: { type: 'number', minimum: 1, maximum: 20, default: 10, description: 'Maximum number of results to return' },
-                },
-                required: ['persona_id', 'query'],
-            },
-        },
-        {
-            name: 'db_read',
-            description: 'Read from the GIF Postgres database. Persona scope is validated before execution.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
-                    table: { type: 'string', minLength: 1, description: 'Table name to query' },
-                    filters: { type: 'string', description: 'Optional JSON string of filter conditions e.g. {"status":"active"}' },
-                    limit: { type: 'number', minimum: 1, maximum: 1000, default: 100, description: 'Maximum rows to return' },
-                },
-                required: ['persona_id', 'table'],
-            },
-        },
-        {
-            name: 'db_write',
-            description: 'Write to the GIF Postgres database. Persona scope and output destinations are validated before execution.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
-                    table: { type: 'string', minLength: 1, description: 'Table name to write to' },
-                    record: { type: 'string', description: 'JSON string of the record to insert e.g. {"key":"value"}' },
-                },
-                required: ['persona_id', 'table', 'record'],
-            },
-        },
-        {
-            name: 'persona_create',
-            description: 'Create a new persona in the GIF registry. Issuing persona must have manage_personas in permitted_actions.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    persona_id: { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
-                    issuing_entity: { type: 'string', minLength: 1, description: 'Name of the entity issuing the persona' },
-                    purpose: { type: 'string', minLength: 1, description: 'Human-readable declaration of business function' },
-                    created_by: { type: 'string', minLength: 1, description: 'Identity of the actor creating the persona' },
-                    scope_definition: { type: 'string', description: 'JSON string of scope: permitted_sources, permitted_actions, output_destinations, retention_policy' },
-                    valid_until: { type: 'string', description: 'ISO 8601 datetime when persona expires' },
-                    valid_from: { type: 'string', description: 'ISO 8601 datetime when persona becomes valid (defaults to now)' },
-                    max_delegation_depth: { type: 'number', minimum: 0, default: 0, description: 'Maximum delegation hops allowed (0 = no delegation)' },
-                    parent_persona_id: { type: 'string', format: 'uuid', description: 'UUID of parent persona for delegated scope (optional)' },
-                },
-                required: ['persona_id', 'issuing_entity', 'purpose', 'created_by', 'scope_definition', 'valid_until'],
-            },
-        },
-        {
-            name: 'persona_revoke',
-            description: 'Revoke a persona immediately. Issuing persona must have manage_personas in permitted_actions.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    persona_id: { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
-                    target_persona_id: { type: 'string', format: 'uuid', description: 'UUID of the persona to revoke' },
-                    reason: { type: 'string', minLength: 1, description: 'Reason for revocation — recorded in revocation_log' },
-                    revoked_by: { type: 'string', minLength: 1, description: 'Identity of the actor initiating the revocation' },
-                },
-                required: ['persona_id', 'target_persona_id', 'reason', 'revoked_by'],
-            },
-        },
-    ],
+    tools: Array.from(registry_js_1.TOOL_REGISTRY.values()).map(h => h.definition),
 }));
 // ----------------------------------------------------------------------------
-// Tool call handler
+// CallTool — enforcement engine + registry dispatch
 // Session lifecycle managed here — wraps all tool executions.
 // ----------------------------------------------------------------------------
 server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
@@ -150,44 +60,23 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     if (!persona_id) {
         throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, 'persona_id is required for all tool calls');
     }
-    // persona_validate does not create a session — it is a diagnostic tool
-    if (name === 'persona_validate') {
-        const result = await (0, persona_js_1.validatePersona)(persona_id);
-        if (!result.valid) {
-            return {
-                content: [{
-                        type: 'text',
-                        text: JSON.stringify({ valid: false, reason: result.reason, message: result.message }),
-                    }],
-                isError: true,
-            };
-        }
-        return {
-            content: [{
-                    type: 'text',
-                    text: JSON.stringify({
-                        valid: true,
-                        persona_id: result.persona.persona_id,
-                        issuing_entity: result.persona.issuing_entity,
-                        purpose: result.persona.purpose,
-                        status: result.persona.status,
-                        valid_from: result.persona.valid_from,
-                        valid_until: result.persona.valid_until,
-                        scope_definition: result.persona.scope_definition,
-                    }),
-                }],
-        };
+    const toolHandler = registry_js_1.TOOL_REGISTRY.get(name);
+    if (!toolHandler) {
+        throw new types_js_1.McpError(types_js_1.ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
-    // All other tools — validate persona then create session
+    // Validate persona — always, regardless of skipSession
     const validation = await (0, persona_js_1.validatePersona)(persona_id);
     if (!validation.valid) {
         return {
-            content: [{ type: 'text', text: JSON.stringify({ error: validation.message }) }],
+            content: [{ type: 'text', text: JSON.stringify({ valid: false, reason: validation.reason, message: validation.message }) }],
             isError: true,
         };
     }
-    // Create session — captures invocation context and persona state snapshot
-    // for point-in-time reconstruction (Sprint 3)
+    // skipSession tools (persona_validate) — execute directly, no session or audit
+    if (toolHandler.skipSession) {
+        return toolHandler.execute(args, validation.persona, '');
+    }
+    // All other tools — create session, execute, audit, close session
     const sessionId = await (0, session_js_1.createSession)({
         personaId: persona_id,
         invocationContext: {
@@ -199,73 +88,18 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     });
     let result;
     try {
-        switch (name) {
-            case 'web_search':
-                result = await (0, web_search_js_1.executeWebSearch)({
-                    persona_id,
-                    query: args['query'],
-                    max_results: args['max_results'] ?? 10,
-                }, validation.persona, sessionId);
-                break;
-            case 'db_read':
-                result = await (0, db_read_js_1.executeDbRead)({
-                    persona_id,
-                    table: args['table'],
-                    filters: args['filters'],
-                    limit: args['limit'] ?? 100,
-                }, validation.persona, sessionId);
-                break;
-            case 'db_write':
-                result = await (0, db_write_js_1.executeDbWrite)({
-                    persona_id,
-                    table: args['table'],
-                    record: args['record'],
-                }, validation.persona, sessionId);
-                break;
-            case 'persona_create':
-                result = await (0, persona_create_js_1.executePersonaCreate)({
-                    persona_id,
-                    issuing_entity: args['issuing_entity'],
-                    purpose: args['purpose'],
-                    created_by: args['created_by'],
-                    scope_definition: args['scope_definition'],
-                    valid_until: args['valid_until'],
-                    valid_from: args['valid_from'],
-                    max_delegation_depth: args['max_delegation_depth'],
-                    parent_persona_id: args['parent_persona_id'],
-                }, validation.persona, sessionId);
-                break;
-            case 'persona_revoke':
-                result = await (0, persona_revoke_js_1.executePersonaRevoke)({
-                    persona_id,
-                    target_persona_id: args['target_persona_id'],
-                    reason: args['reason'],
-                    revoked_by: args['revoked_by'],
-                }, validation.persona, sessionId);
-                break;
-            default:
-                throw new types_js_1.McpError(types_js_1.ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-        }
+        result = await toolHandler.execute(args, validation.persona, sessionId);
     }
     finally {
-        // Determine event type and source_ref for persona lifecycle events.
-        // persona_create and persona_revoke are first-class audit events —
-        // event_type reflects the lifecycle action, not the generic 'tool_call'.
-        // source_ref captures the new or target persona_id for reconstruction.
+        // Resolve audit event type and source_ref.
+        // Tools with auditMetadata control their own event classification.
+        // All others emit a generic tool_call event.
         let eventType = 'tool_call';
         let sourceRef;
-        if (name === 'persona_create' || name === 'persona_revoke') {
-            eventType = name;
-            if (result && !result.isError) {
-                try {
-                    const parsed = JSON.parse(result.content[0].text);
-                    sourceRef = (parsed['persona_id'] ??
-                        parsed['target_persona_id']);
-                }
-                catch {
-                    // sourceRef stays undefined — non-fatal
-                }
-            }
+        if (toolHandler.auditMetadata && result !== undefined) {
+            const meta = toolHandler.auditMetadata(args, result);
+            eventType = meta.eventType;
+            sourceRef = meta.sourceRef;
         }
         await (0, session_js_1.logAuditEvent)({
             personaId: persona_id,
@@ -325,6 +159,7 @@ httpServer.listen(PORT, () => {
     console.log(`[server] GIF MCP server running on port ${PORT}`);
     console.log(`[server] Health: http://localhost:${PORT}/health`);
     console.log(`[server] SSE:    http://localhost:${PORT}/sse`);
+    console.log(`[server] Tools registered: ${Array.from(registry_js_1.TOOL_REGISTRY.keys()).join(', ')}`);
 });
 process.on('SIGTERM', () => {
     console.log('[server] SIGTERM received — shutting down');

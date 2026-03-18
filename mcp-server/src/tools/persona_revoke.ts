@@ -6,10 +6,11 @@
 // Scope checks:
 //   - Issuing persona must have 'manage_personas' in permitted_actions.
 //
-// Revocation is immediate. Active sessions under the target persona are NOT
-// force-closed by this tool — they will fail persona validation on next call.
-// The revocation_log.active_sessions_terminated field is set to 0; a future
-// session sweep (Sprint 4) will populate this accurately.
+// Revocation is immediate. Active sessions under the target persona are
+// closed within the same transaction — ended_at is set to now() for all
+// sessions with ended_at IS NULL. active_sessions_terminated is the count
+// of sessions closed. Any in-flight call that already passed persona
+// validation will complete; subsequent calls will fail validation.
 //
 // The target persona_id is captured in source_ref on the audit event, making
 // persona_revoke events first-class and reconstructible without joining
@@ -22,6 +23,7 @@
 
 import pool from '../db.js';
 import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
+import type { ToolHandler, ToolResult } from './types.js';
 
 // ----------------------------------------------------------------------------
 // Types
@@ -99,7 +101,8 @@ export async function executePersonaRevoke(
     };
   }
 
-  // Execute revocation in a transaction — status update + revocation_log are atomic
+  // Execute revocation in a transaction — status update, session close,
+  // and revocation_log are atomic
   try {
     await pool.query('BEGIN');
 
@@ -110,6 +113,16 @@ export async function executePersonaRevoke(
       [args.target_persona_id]
     );
 
+    // Close all open sessions for the revoked persona
+    const sessionResult = await pool.query<{ count: string }>(
+      `UPDATE sessions
+       SET ended_at = now()
+       WHERE persona_id = $1 AND ended_at IS NULL
+       RETURNING session_id`,
+      [args.target_persona_id]
+    );
+    const sessionsTerminated = sessionResult.rowCount ?? 0;
+
     await pool.query(
       `INSERT INTO revocation_log (
          persona_id,
@@ -118,12 +131,13 @@ export async function executePersonaRevoke(
          reason,
          revoked_by,
          active_sessions_terminated
-       ) VALUES ($1, $2, 'revoked', $3, $4, 0)`,
+       ) VALUES ($1, $2, 'revoked', $3, $4, $5)`,
       [
         args.target_persona_id,
         previousStatus,
         args.reason,
         args.revoked_by,
+        sessionsTerminated,
       ]
     );
 
@@ -131,12 +145,13 @@ export async function executePersonaRevoke(
 
     return {
       content: [{ type: 'text', text: JSON.stringify({
-        target_persona_id: args.target_persona_id,
-        previous_status:   previousStatus,
-        new_status:        'revoked',
-        reason:            args.reason,
-        revoked_by:        args.revoked_by,
-        revoked:           true,
+        target_persona_id:    args.target_persona_id,
+        previous_status:      previousStatus,
+        new_status:           'revoked',
+        reason:               args.reason,
+        revoked_by:           args.revoked_by,
+        sessions_terminated:  sessionsTerminated,
+        revoked:              true,
       }) }],
     };
 
@@ -150,3 +165,49 @@ export async function executePersonaRevoke(
     };
   }
 }
+
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// Framework tool: ships with GIF enforcement engine (ADR-026).
+// Emits first-class persona_revoke audit event with source_ref = target persona_id.
+// ----------------------------------------------------------------------------
+
+export const handler: ToolHandler = {
+  definition: {
+    name: 'persona_revoke',
+    description: 'Revoke a persona immediately. Issuing persona must have manage_personas in permitted_actions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        persona_id:        { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
+        target_persona_id: { type: 'string', format: 'uuid', description: 'UUID of the persona to revoke' },
+        reason:            { type: 'string', minLength: 1, description: 'Reason for revocation — recorded in revocation_log' },
+        revoked_by:        { type: 'string', minLength: 1, description: 'Identity of the actor initiating the revocation' },
+      },
+      required: ['persona_id', 'target_persona_id', 'reason', 'revoked_by'],
+    },
+  },
+  execute: (args, persona, sessionId) =>
+    executePersonaRevoke(
+      {
+        persona_id:        args['persona_id'] as string,
+        target_persona_id: args['target_persona_id'] as string,
+        reason:            args['reason'] as string,
+        revoked_by:        args['revoked_by'] as string,
+      },
+      persona,
+      sessionId
+    ),
+  auditMetadata: (args, result: ToolResult) => {
+    let sourceRef: string | undefined;
+    if (!result.isError) {
+      try {
+        const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+        sourceRef = parsed['target_persona_id'] as string | undefined;
+      } catch { /* non-fatal */ }
+    }
+    // Fall back to args if result parsing fails
+    if (!sourceRef) sourceRef = args['target_persona_id'] as string | undefined;
+    return { eventType: 'persona_revoke', sourceRef };
+  },
+};

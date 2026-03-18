@@ -1,4 +1,5 @@
 import { Persona } from '../persona.js';
+import type { ToolHandler } from './types.js';
 export interface PersonaRevokeArgs {
     persona_id: string;
     target_persona_id: string;
@@ -12,4 +13,5 @@ export declare function executePersonaRevoke(args: PersonaRevokeArgs, persona: P
     }>;
     isError?: boolean;
 }>;
+export declare const handler: ToolHandler;
 //# sourceMappingURL=persona_revoke.d.ts.map

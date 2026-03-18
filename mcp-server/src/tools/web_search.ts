@@ -12,6 +12,7 @@
 // =============================================================================
 
 import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
+import type { ToolHandler } from './types.js';
 
 const SEARXNG_URL = process.env.SEARXNG_URL || 'http://searxng:8080';
 
@@ -153,3 +154,33 @@ export async function executeWebSearch(
     }) }],
   };
 }
+
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// ----------------------------------------------------------------------------
+
+export const handler: ToolHandler = {
+  definition: {
+    name: 'web_search',
+    description: 'Search the web via SearXNG. Persona scope is validated before execution.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        persona_id:  { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+        query:       { type: 'string', minLength: 1, description: 'Search query string' },
+        max_results: { type: 'number', minimum: 1, maximum: 20, default: 10, description: 'Maximum number of results to return' },
+      },
+      required: ['persona_id', 'query'],
+    },
+  },
+  execute: (args, persona, sessionId) =>
+    executeWebSearch(
+      {
+        persona_id:  args['persona_id'] as string,
+        query:       args['query'] as string,
+        max_results: (args['max_results'] as number | undefined) ?? 10,
+      },
+      persona,
+      sessionId
+    ),
+};

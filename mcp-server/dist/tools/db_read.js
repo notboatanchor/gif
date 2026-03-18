@@ -18,6 +18,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.handler = void 0;
 exports.executeDbRead = executeDbRead;
 const db_js_1 = __importDefault(require("../db.js"));
 const persona_js_1 = require("../persona.js");
@@ -137,4 +138,29 @@ async function executeDbRead(args, persona, sessionId) {
         };
     }
 }
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// ----------------------------------------------------------------------------
+exports.handler = {
+    definition: {
+        name: 'db_read',
+        description: 'Read from the GIF Postgres database. Persona scope is validated before execution.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+                table: { type: 'string', minLength: 1, description: 'Table name to query' },
+                filters: { type: 'string', description: 'Optional JSON string of filter conditions e.g. {"status":"active"}' },
+                limit: { type: 'number', minimum: 1, maximum: 1000, default: 100, description: 'Maximum rows to return' },
+            },
+            required: ['persona_id', 'table'],
+        },
+    },
+    execute: (args, persona, sessionId) => executeDbRead({
+        persona_id: args['persona_id'],
+        table: args['table'],
+        filters: args['filters'],
+        limit: args['limit'] ?? 100,
+    }, persona, sessionId),
+};
 //# sourceMappingURL=db_read.js.map

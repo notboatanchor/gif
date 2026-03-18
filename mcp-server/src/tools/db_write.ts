@@ -17,6 +17,7 @@
 
 import pool from '../db.js';
 import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
+import type { ToolHandler } from './types.js';
 
 // ----------------------------------------------------------------------------
 // Table allowlist
@@ -161,3 +162,33 @@ export async function executeDbWrite(
     };
   }
 }
+
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// ----------------------------------------------------------------------------
+
+export const handler: ToolHandler = {
+  definition: {
+    name: 'db_write',
+    description: 'Write to the GIF Postgres database. Persona scope and output destinations are validated before execution.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+        table:      { type: 'string', minLength: 1, description: 'Table name to write to' },
+        record:     { type: 'string', description: 'JSON string of the record to insert e.g. {"key":"value"}' },
+      },
+      required: ['persona_id', 'table', 'record'],
+    },
+  },
+  execute: (args, persona, sessionId) =>
+    executeDbWrite(
+      {
+        persona_id: args['persona_id'] as string,
+        table:      args['table'] as string,
+        record:     args['record'] as string,
+      },
+      persona,
+      sessionId
+    ),
+};

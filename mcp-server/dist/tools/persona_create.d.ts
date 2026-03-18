@@ -1,4 +1,5 @@
 import { Persona } from '../persona.js';
+import type { ToolHandler } from './types.js';
 export interface PersonaCreateArgs {
     persona_id: string;
     issuing_entity: string;
@@ -17,4 +18,5 @@ export declare function executePersonaCreate(args: PersonaCreateArgs, persona: P
     }>;
     isError?: boolean;
 }>;
+export declare const handler: ToolHandler;
 //# sourceMappingURL=persona_create.d.ts.map

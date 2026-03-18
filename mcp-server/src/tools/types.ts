@@ -1,0 +1,51 @@
+// src/tools/types.ts
+// =============================================================================
+// ToolHandler — the interface every tool handler must satisfy.
+//
+// The enforcement engine (index.ts) knows only this interface.
+// It has no knowledge of which tools exist or what they do.
+//
+// Adopters building on the GIF enforcement engine assemble a registry of
+// ToolHandler objects. The enforcement engine iterates the registry for
+// ListTools and dispatches by name for CallTool.
+//
+// ADR-026: MCP server deployment topology
+// ADR-027: GIF packaging model and extraction progression
+// =============================================================================
+
+import type { Persona } from '../persona.js';
+
+export type ToolResult = {
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+};
+
+export interface ToolHandler {
+  // MCP tool definition — returned verbatim in ListTools responses.
+  definition: {
+    name:        string;
+    description: string;
+    inputSchema: object;
+  };
+
+  // Tool execution function. Always receives validated persona and sessionId.
+  // Session is created before execute() is called unless skipSession is true.
+  execute: (
+    args:      Record<string, unknown>,
+    persona:   Persona,
+    sessionId: string
+  ) => Promise<ToolResult>;
+
+  // Optional: returns the audit event_type and source_ref to record.
+  // Defaults to event_type='tool_call', source_ref=undefined when absent.
+  // Framework tools (persona_create, persona_revoke) use this to emit
+  // first-class lifecycle events instead of generic tool_call events.
+  auditMetadata?: (
+    args:   Record<string, unknown>,
+    result: ToolResult
+  ) => { eventType: string; sourceRef?: string };
+
+  // If true, the tool is invoked without creating a session.
+  // persona_validate is diagnostic — it should not produce audit events.
+  skipSession?: boolean;
+}

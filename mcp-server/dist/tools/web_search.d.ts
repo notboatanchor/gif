@@ -1,4 +1,5 @@
 import { Persona } from '../persona.js';
+import type { ToolHandler } from './types.js';
 export interface WebSearchArgs {
     persona_id: string;
     query: string;
@@ -24,4 +25,5 @@ export declare function executeWebSearch(args: WebSearchArgs, persona: Persona, 
     }>;
     isError?: boolean;
 }>;
+export declare const handler: ToolHandler;
 //# sourceMappingURL=web_search.d.ts.map

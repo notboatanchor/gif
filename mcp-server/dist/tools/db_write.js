@@ -19,6 +19,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.handler = void 0;
 exports.executeDbWrite = executeDbWrite;
 const db_js_1 = __importDefault(require("../db.js"));
 const persona_js_1 = require("../persona.js");
@@ -131,4 +132,27 @@ async function executeDbWrite(args, persona, sessionId) {
         };
     }
 }
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// ----------------------------------------------------------------------------
+exports.handler = {
+    definition: {
+        name: 'db_write',
+        description: 'Write to the GIF Postgres database. Persona scope and output destinations are validated before execution.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+                table: { type: 'string', minLength: 1, description: 'Table name to write to' },
+                record: { type: 'string', description: 'JSON string of the record to insert e.g. {"key":"value"}' },
+            },
+            required: ['persona_id', 'table', 'record'],
+        },
+    },
+    execute: (args, persona, sessionId) => executeDbWrite({
+        persona_id: args['persona_id'],
+        table: args['table'],
+        record: args['record'],
+    }, persona, sessionId),
+};
 //# sourceMappingURL=db_write.js.map

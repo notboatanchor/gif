@@ -12,6 +12,7 @@
 // ADR-009: Persona-based permissions as infrastructure
 // =============================================================================
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.handler = void 0;
 exports.executeWebSearch = executeWebSearch;
 const persona_js_1 = require("../persona.js");
 const SEARXNG_URL = process.env.SEARXNG_URL || 'http://searxng:8080';
@@ -95,4 +96,27 @@ async function executeWebSearch(args, persona, sessionId) {
                 }) }],
     };
 }
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// ----------------------------------------------------------------------------
+exports.handler = {
+    definition: {
+        name: 'web_search',
+        description: 'Search the web via SearXNG. Persona scope is validated before execution.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+                query: { type: 'string', minLength: 1, description: 'Search query string' },
+                max_results: { type: 'number', minimum: 1, maximum: 20, default: 10, description: 'Maximum number of results to return' },
+            },
+            required: ['persona_id', 'query'],
+        },
+    },
+    execute: (args, persona, sessionId) => executeWebSearch({
+        persona_id: args['persona_id'],
+        query: args['query'],
+        max_results: args['max_results'] ?? 10,
+    }, persona, sessionId),
+};
 //# sourceMappingURL=web_search.js.map

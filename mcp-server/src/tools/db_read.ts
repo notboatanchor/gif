@@ -16,6 +16,7 @@
 
 import pool from '../db.js';
 import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
+import type { ToolHandler } from './types.js';
 
 // ----------------------------------------------------------------------------
 // Table allowlist
@@ -167,3 +168,35 @@ export async function executeDbRead(
     };
   }
 }
+
+// ----------------------------------------------------------------------------
+// ToolHandler export — consumed by the tool registry in index.ts
+// ----------------------------------------------------------------------------
+
+export const handler: ToolHandler = {
+  definition: {
+    name: 'db_read',
+    description: 'Read from the GIF Postgres database. Persona scope is validated before execution.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+        table:      { type: 'string', minLength: 1, description: 'Table name to query' },
+        filters:    { type: 'string', description: 'Optional JSON string of filter conditions e.g. {"status":"active"}' },
+        limit:      { type: 'number', minimum: 1, maximum: 1000, default: 100, description: 'Maximum rows to return' },
+      },
+      required: ['persona_id', 'table'],
+    },
+  },
+  execute: (args, persona, sessionId) =>
+    executeDbRead(
+      {
+        persona_id: args['persona_id'] as string,
+        table:      args['table'] as string,
+        filters:    args['filters'] as string | undefined,
+        limit:      (args['limit'] as number | undefined) ?? 100,
+      },
+      persona,
+      sessionId
+    ),
+};
