@@ -46,6 +46,7 @@ const ALLOWED_READ_TABLES = new Set([
     'synthesis_outputs',
     'tool_registry',
     'user_persona_assignments',
+    'erasure_log',
 ]);
 // ----------------------------------------------------------------------------
 // Scope validation

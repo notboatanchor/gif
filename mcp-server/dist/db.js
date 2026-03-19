@@ -15,7 +15,7 @@ const pool = new pg_1.Pool({
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     user: process.env.POSTGRES_USER || 'gif_app',
     password: process.env.POSTGRES_PASSWORD,
-    database: process.env.POSTGRES_DB || 'gif_research',
+    database: process.env.POSTGRES_DB || 'gif',
     // Connection pool sizing.
     // Conservative defaults for current single-server deployment.
     // Revisit if concurrent tool call volume increases significantly.
