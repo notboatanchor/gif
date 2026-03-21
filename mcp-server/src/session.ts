@@ -1,137 +1,17 @@
 // src/session.ts
 // =============================================================================
-// Session management
-// Creates and closes session records in the sessions table.
-// Every tool call creates a session. The session_id is passed to audit
-// event and scope violation logging throughout the tool call lifecycle.
+// Session management — re-export shim (ADR-027)
 //
-// Sessions are persona-scoped. A session record is the temporal container
-// for all audit events within a single tool invocation.
+// createSession, closeSession, and logAuditEvent delegate to the pool-bound
+// instance in enforcement_instance.ts.
 //
-// ADR-017: Governance audit schema stubs
+// index.ts continues importing from this file unchanged.
+// All session/audit logic lives in enforcement.ts — this file is a stable
+// import surface, not an implementation.
 // =============================================================================
 
-import pool from './db.js';
+import { gif } from './enforcement_instance.js';
 
-// ----------------------------------------------------------------------------
-// Types
-// ----------------------------------------------------------------------------
-
-export interface Session {
-  session_id:         string;
-  persona_id:         string;
-  started_at:         Date;
-  ended_at:           Date | null;
-  invocation_context: Record<string, unknown> | null;
-}
-
-// ----------------------------------------------------------------------------
-// createSession()
-// Called at the start of every tool invocation after persona validation.
-// invocation_context captures the tool name and arguments at call time —
-// supports point-in-time reconstruction per ADR-017.
-// ----------------------------------------------------------------------------
-
-export async function createSession(params: {
-  personaId:          string;
-  invocationContext:  Record<string, unknown>;
-}): Promise<string> {
-
-  const { personaId, invocationContext } = params;
-
-  try {
-    const result = await pool.query<{ session_id: string }>(
-      `INSERT INTO sessions (persona_id, invocation_context)
-       VALUES ($1, $2)
-       RETURNING session_id`,
-      [personaId, JSON.stringify(invocationContext)]
-    );
-
-    return result.rows[0].session_id;
-
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`[session] Failed to create session for persona ${personaId}:`, message);
-    throw new Error(`Session creation failed: ${message}`);
-  }
-}
-
-// ----------------------------------------------------------------------------
-// closeSession()
-// Called when a tool invocation completes — success or failure.
-// Does not throw — a close failure must not mask the tool response.
-// ----------------------------------------------------------------------------
-
-export async function closeSession(sessionId: string): Promise<void> {
-  try {
-    await pool.query(
-      `UPDATE sessions SET ended_at = now() WHERE session_id = $1`,
-      [sessionId]
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`[session] Failed to close session ${sessionId}:`, message);
-  }
-}
-
-// ----------------------------------------------------------------------------
-// logAuditEvent()
-// Records a tool execution event in the audit_events table.
-// Called after every tool call — successful or not.
-// Does not throw — audit logging failure must not mask the tool response.
-// ----------------------------------------------------------------------------
-
-export async function logAuditEvent(params: {
-  personaId:        string;
-  sessionId:        string;
-  eventType:        string;
-  toolName:         string;
-  outcome:          string;
-  sourceRef?:       string;   // resource acted on: table name, URL, or persona_id for lifecycle events
-  sourcesActed?:    string[];
-  flagged?:         boolean;
-  purposeDeclared?: string;   // copied from persona.purpose at call time (ADR-017)
-}): Promise<void> {
-
-  const {
-    personaId,
-    sessionId,
-    eventType,
-    toolName,
-    outcome,
-    sourceRef,
-    sourcesActed = [],
-    flagged = false,
-    purposeDeclared,
-  } = params;
-
-  try {
-    await pool.query(
-      `INSERT INTO audit_events (
-         persona_id,
-         session_id,
-         event_type,
-         tool_name,
-         outcome,
-         source_ref,
-         sources_touched,
-         flagged,
-         purpose_declared
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        personaId,
-        sessionId,
-        eventType,
-        toolName,
-        outcome,
-        sourceRef ?? null,
-        JSON.stringify(sourcesActed),
-        flagged,
-        purposeDeclared ?? null,
-      ]
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`[session] Failed to log audit event for session ${sessionId}:`, message);
-  }
-}
+export const createSession  = gif.createSession;
+export const closeSession   = gif.closeSession;
+export const logAuditEvent  = gif.logAuditEvent;

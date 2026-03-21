@@ -1,92 +1,19 @@
 "use strict";
 // src/session.ts
 // =============================================================================
-// Session management
-// Creates and closes session records in the sessions table.
-// Every tool call creates a session. The session_id is passed to audit
-// event and scope violation logging throughout the tool call lifecycle.
+// Session management — re-export shim (ADR-027)
 //
-// Sessions are persona-scoped. A session record is the temporal container
-// for all audit events within a single tool invocation.
+// createSession, closeSession, and logAuditEvent delegate to the pool-bound
+// instance in enforcement_instance.ts.
 //
-// ADR-017: Governance audit schema stubs
+// index.ts continues importing from this file unchanged.
+// All session/audit logic lives in enforcement.ts — this file is a stable
+// import surface, not an implementation.
 // =============================================================================
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSession = createSession;
-exports.closeSession = closeSession;
-exports.logAuditEvent = logAuditEvent;
-const db_js_1 = __importDefault(require("./db.js"));
-// ----------------------------------------------------------------------------
-// createSession()
-// Called at the start of every tool invocation after persona validation.
-// invocation_context captures the tool name and arguments at call time —
-// supports point-in-time reconstruction per ADR-017.
-// ----------------------------------------------------------------------------
-async function createSession(params) {
-    const { personaId, invocationContext } = params;
-    try {
-        const result = await db_js_1.default.query(`INSERT INTO sessions (persona_id, invocation_context)
-       VALUES ($1, $2)
-       RETURNING session_id`, [personaId, JSON.stringify(invocationContext)]);
-        return result.rows[0].session_id;
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`[session] Failed to create session for persona ${personaId}:`, message);
-        throw new Error(`Session creation failed: ${message}`);
-    }
-}
-// ----------------------------------------------------------------------------
-// closeSession()
-// Called when a tool invocation completes — success or failure.
-// Does not throw — a close failure must not mask the tool response.
-// ----------------------------------------------------------------------------
-async function closeSession(sessionId) {
-    try {
-        await db_js_1.default.query(`UPDATE sessions SET ended_at = now() WHERE session_id = $1`, [sessionId]);
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`[session] Failed to close session ${sessionId}:`, message);
-    }
-}
-// ----------------------------------------------------------------------------
-// logAuditEvent()
-// Records a tool execution event in the audit_events table.
-// Called after every tool call — successful or not.
-// Does not throw — audit logging failure must not mask the tool response.
-// ----------------------------------------------------------------------------
-async function logAuditEvent(params) {
-    const { personaId, sessionId, eventType, toolName, outcome, sourceRef, sourcesActed = [], flagged = false, purposeDeclared, } = params;
-    try {
-        await db_js_1.default.query(`INSERT INTO audit_events (
-         persona_id,
-         session_id,
-         event_type,
-         tool_name,
-         outcome,
-         source_ref,
-         sources_touched,
-         flagged,
-         purpose_declared
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [
-            personaId,
-            sessionId,
-            eventType,
-            toolName,
-            outcome,
-            sourceRef ?? null,
-            JSON.stringify(sourcesActed),
-            flagged,
-            purposeDeclared ?? null,
-        ]);
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`[session] Failed to log audit event for session ${sessionId}:`, message);
-    }
-}
+exports.logAuditEvent = exports.closeSession = exports.createSession = void 0;
+const enforcement_instance_js_1 = require("./enforcement_instance.js");
+exports.createSession = enforcement_instance_js_1.gif.createSession;
+exports.closeSession = enforcement_instance_js_1.gif.closeSession;
+exports.logAuditEvent = enforcement_instance_js_1.gif.logAuditEvent;
 //# sourceMappingURL=session.js.map

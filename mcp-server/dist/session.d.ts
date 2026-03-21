@@ -1,16 +1,9 @@
-export interface Session {
-    session_id: string;
-    persona_id: string;
-    started_at: Date;
-    ended_at: Date | null;
-    invocation_context: Record<string, unknown> | null;
-}
-export declare function createSession(params: {
+export declare const createSession: (params: {
     personaId: string;
     invocationContext: Record<string, unknown>;
-}): Promise<string>;
-export declare function closeSession(sessionId: string): Promise<void>;
-export declare function logAuditEvent(params: {
+}) => Promise<string>;
+export declare const closeSession: (sessionId: string) => Promise<void>;
+export declare const logAuditEvent: (params: {
     personaId: string;
     sessionId: string;
     eventType: string;
@@ -20,5 +13,5 @@ export declare function logAuditEvent(params: {
     sourcesActed?: string[];
     flagged?: boolean;
     purposeDeclared?: string;
-}): Promise<void>;
+}) => Promise<void>;
 //# sourceMappingURL=session.d.ts.map
