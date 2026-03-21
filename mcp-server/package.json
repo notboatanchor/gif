@@ -1,8 +1,16 @@
 {
-  "name": "gif-mcp-server",
+  "name": "gif-enforcement",
   "version": "0.1.0",
   "description": "GIF MCP server — AI tool interface and persona enforcement layer",
   "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/enforcement.js",
+      "require": "./dist/enforcement.js",
+      "types": "./dist/enforcement.d.ts"
+    }
+  },
+  "types": "dist/enforcement.d.ts",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
