@@ -90,9 +90,12 @@ COMMENT ON COLUMN gif.audit_read_log.rows_returned IS
 -- then DELETE (or simply never INSERT) its read log entries.
 -- ---------------------------------------------------------------------------
 
--- INSERT-only — no SELECT grant
+-- INSERT-only — no SELECT grant.
+-- ALTER DEFAULT PRIVILEGES in migration 005 grants SELECT on all future gif schema tables.
+-- Explicitly revoke it here so gif_app cannot query their own read log.
+-- Adopter layer users (research_app, etc.) are granted INSERT by their own bootstrap scripts.
 GRANT INSERT ON gif.audit_read_log TO gif_app;
-GRANT INSERT ON gif.audit_read_log TO research_app;
+REVOKE SELECT ON gif.audit_read_log FROM gif_app;
 
 -- RLS: INSERT policies only — no SELECT policy means application users
 -- are denied even if they somehow had a SELECT grant.
@@ -100,10 +103,6 @@ ALTER TABLE gif.audit_read_log ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY audit_read_log_insert_gif_app
     ON gif.audit_read_log AS PERMISSIVE FOR INSERT TO gif_app
-    WITH CHECK (true);
-
-CREATE POLICY audit_read_log_insert_research_app
-    ON gif.audit_read_log AS PERMISSIVE FOR INSERT TO research_app
     WITH CHECK (true);
 
 -- Indexes
@@ -138,9 +137,10 @@ BEGIN
     FROM pg_policies
     WHERE schemaname = 'gif' AND tablename = 'audit_read_log';
 
-    -- 2 INSERT policies (gif_app, research_app) — no SELECT policies
-    IF pol_count <> 2 THEN
-        RAISE EXCEPTION 'Expected 2 RLS policies on audit_read_log, found %', pol_count;
+    -- 1 INSERT policy (gif_app) — no SELECT policies
+    -- Adopter layer users add their own INSERT policies via their bootstrap scripts
+    IF pol_count <> 1 THEN
+        RAISE EXCEPTION 'Expected 1 RLS policy on audit_read_log, found %', pol_count;
     END IF;
 
     RAISE NOTICE 'Migration 008 verified: audit_read_log created, INSERT-only RLS, % policies', pol_count;

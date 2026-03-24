@@ -57,7 +57,7 @@ const gifPool = new Pool({
 const pgPool = new Pool({
   host:     process.env.PGHOST          || 'localhost',
   port:     parseInt(process.env.PGPORT || '5432'),
-  user:     process.env.PGADMINUSER     || 'scott',
+  user:     process.env.PGADMINUSER     || 'gif_admin',
   password: process.env.PGADMINPASSWORD,
   database: process.env.PGDATABASE      || 'gif',
 });
