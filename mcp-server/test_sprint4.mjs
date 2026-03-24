@@ -14,13 +14,12 @@
 // Requires: MCP server running on port 3100, gif_research DB accessible
 // =============================================================================
 
+import pg from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
+const { Pool } = pg;
 const SERVER_URL = 'http://localhost:3100';
-
-// Admin persona (has manage_personas) — created Sprint 3
-const ADMIN_PERSONA_ID = '6d022c2f-bb0c-4277-a645-308e45957962';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -38,6 +37,29 @@ async function callTool(client, toolName, args) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+
+// Discover admin persona (must have manage_personas in scope)
+const pool = new Pool({
+  host:     process.env.PGHOST     || 'localhost',
+  port:     parseInt(process.env.PGPORT || '5432'),
+  user:     process.env.PGUSER     || 'gif_app',
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE || 'gif',
+});
+
+const adminRow = await pool.query(
+  `SELECT persona_id FROM gif.personas
+   WHERE status = 'active'
+     AND scope_definition->'permitted_actions' ? 'manage_personas'
+   LIMIT 1`
+);
+await pool.end();
+
+if (adminRow.rows.length === 0) {
+  console.error('[sprint4] No persona with manage_personas found — run test_setup.mjs first');
+  process.exit(1);
+}
+const ADMIN_PERSONA_ID = adminRow.rows[0].persona_id;
 
 const transport = new SSEClientTransport(new URL(`${SERVER_URL}/sse`));
 const client    = new Client({ name: 'sprint4-test', version: '1.0.0' }, { capabilities: {} });

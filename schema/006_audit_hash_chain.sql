@@ -125,17 +125,16 @@ BEGIN
 END;
 $$;
 
--- Set owner to scott (the audit_events table owner) so SECURITY DEFINER runs
--- as scott, who has SELECT on all audit_events partitions. gif_admin owns the
--- gif schema but not the tables (tables were created as scott in earlier migrations).
--- Owning as scott ensures the trigger can SELECT prior rows to build the chain.
-ALTER FUNCTION gif.compute_audit_event_hash() OWNER TO scott;
+-- gif_admin owns all tables (migrations run as gif_admin per ADR-032).
+-- SECURITY DEFINER owned by gif_admin has full SELECT on all partitions
+-- because gif_admin is the table owner. No superuser dependency.
+ALTER FUNCTION gif.compute_audit_event_hash() OWNER TO gif_admin;
 
 COMMENT ON FUNCTION gif.compute_audit_event_hash() IS
     'BEFORE INSERT trigger function for gif.audit_events. '
     'Computes SHA-256 hash chain: event_hash = sha256(preimage || previous_hash). '
-    'SECURITY DEFINER owned by scott (table owner) — runs with full SELECT access '
-    'on all partitions regardless of calling user. '
+    'SECURITY DEFINER owned by gif_admin (table owner per ADR-032) — runs with '
+    'full SELECT access on all partitions regardless of calling user. '
     'Never throws — hash error written as HASH_ERROR string with pg_notify alert.';
 
 -- Attach trigger to the partitioned parent.
@@ -187,11 +186,10 @@ COMMENT ON COLUMN gif.audit_chain_anchors.notes IS
     'Optional external reference. Examples: git commit SHA where anchor was posted, '
     'S3 object URL, blockchain transaction hash. Free text — not validated by GIF.';
 
--- INSERT-only for gif_app and research_app (same pattern as audit_events)
+-- INSERT-only for gif_app (same pattern as audit_events)
+-- Adopter layer users (research_app, etc.) are granted access by their own bootstrap scripts.
 GRANT SELECT, INSERT ON gif.audit_chain_anchors TO gif_app;
-GRANT SELECT, INSERT ON gif.audit_chain_anchors TO research_app;
 REVOKE UPDATE ON gif.audit_chain_anchors FROM gif_app;
-REVOKE UPDATE ON gif.audit_chain_anchors FROM research_app;
 
 ALTER TABLE gif.audit_chain_anchors ENABLE ROW LEVEL SECURITY;
 
@@ -201,14 +199,6 @@ CREATE POLICY audit_chain_anchors_select_gif_app
 
 CREATE POLICY audit_chain_anchors_insert_gif_app
     ON gif.audit_chain_anchors AS PERMISSIVE FOR INSERT TO gif_app
-    WITH CHECK (true);
-
-CREATE POLICY audit_chain_anchors_select_research_app
-    ON gif.audit_chain_anchors AS PERMISSIVE FOR SELECT TO research_app
-    USING (true);
-
-CREATE POLICY audit_chain_anchors_insert_research_app
-    ON gif.audit_chain_anchors AS PERMISSIVE FOR INSERT TO research_app
     WITH CHECK (true);
 
 -- Indexes

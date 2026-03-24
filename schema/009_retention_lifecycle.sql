@@ -20,11 +20,11 @@
 --     - Checks for active legal holds before allowing retirement
 --     - Automatically inserts into erasure_log (the trigger deferred in 003)
 --     - Executes the DROP atomically within a transaction
---   The procedure is SECURITY DEFINER owned by scott (table owner, superuser).
---   This matches the hash chain trigger pattern: gif_admin owns the schema but
---   not the tables, so SECURITY DEFINER functions that SELECT/DROP partitions
---   must be owned by scott. EXECUTE is revoked from gif_app/research_app/PUBLIC;
---   only superusers (scott/postgres) can call the procedure.
+--   The procedure is SECURITY DEFINER owned by gif_admin (ADR-032).
+--   gif_admin owns all GIF tables (migrations run as gif_admin), so SECURITY
+--   DEFINER functions owned by gif_admin have SELECT/DROP on all partitions
+--   without superuser dependency. EXECUTE is revoked from gif_app/research_app/
+--   PUBLIC; only gif_admin and the Postgres superuser can call the procedure.
 -- =============================================================================
 
 BEGIN;
@@ -92,8 +92,8 @@ COMMENT ON COLUMN gif.retention_holds.external_user_id IS
     'Use when the data subject reference is the user identity, not a specific persona.';
 
 -- gif_app: INSERT and SELECT, no UPDATE (cannot release own holds)
+-- Adopter layer users (research_app, etc.) are granted access by their own bootstrap scripts.
 GRANT SELECT, INSERT ON gif.retention_holds TO gif_app;
-GRANT SELECT, INSERT ON gif.retention_holds TO research_app;
 
 ALTER TABLE gif.retention_holds ENABLE ROW LEVEL SECURITY;
 
@@ -103,14 +103,6 @@ CREATE POLICY retention_holds_select_gif_app
 
 CREATE POLICY retention_holds_insert_gif_app
     ON gif.retention_holds AS PERMISSIVE FOR INSERT TO gif_app
-    WITH CHECK (true);
-
-CREATE POLICY retention_holds_select_research_app
-    ON gif.retention_holds AS PERMISSIVE FOR SELECT TO research_app
-    USING (true);
-
-CREATE POLICY retention_holds_insert_research_app
-    ON gif.retention_holds AS PERMISSIVE FOR INSERT TO research_app
     WITH CHECK (true);
 
 -- Indexes
@@ -259,20 +251,18 @@ END;
 $$;
 
 ALTER PROCEDURE gif.retire_partition(TEXT, VARCHAR, TEXT, VARCHAR)
-    OWNER TO scott;
+    OWNER TO gif_admin;
 
 COMMENT ON PROCEDURE gif.retire_partition IS
     'Governed partition retirement. Checks active retention_holds, inserts '
     'erasure_log record, then drops the partition. SECURITY DEFINER owned by '
-    'scott (table owner, superuser) — ensures SELECT access on all partitions '
-    'and DROP privilege. gif_app and research_app are denied EXECUTE. '
+    'gif_admin (table owner per ADR-032) — has SELECT/DROP on all partitions '
+    'it created. gif_app and research_app are denied EXECUTE. '
     'Replaces the manual DROP TABLE template in ops-runbook-audit-retention.md.';
 
 -- Deny application users from calling the procedure
 REVOKE EXECUTE ON PROCEDURE gif.retire_partition(TEXT, VARCHAR, TEXT, VARCHAR)
     FROM gif_app;
-REVOKE EXECUTE ON PROCEDURE gif.retire_partition(TEXT, VARCHAR, TEXT, VARCHAR)
-    FROM research_app;
 REVOKE EXECUTE ON PROCEDURE gif.retire_partition(TEXT, VARCHAR, TEXT, VARCHAR)
     FROM PUBLIC;
 
@@ -345,20 +335,8 @@ REVOKE UPDATE ON gif.audit_events_2026_10 FROM gif_app;
 REVOKE UPDATE ON gif.audit_events_2026_11 FROM gif_app;
 REVOKE UPDATE ON gif.audit_events_2026_12 FROM gif_app;
 
--- Grants on new partitions — research_app
-GRANT SELECT, INSERT ON gif.audit_events_2026_07 TO research_app;
-GRANT SELECT, INSERT ON gif.audit_events_2026_08 TO research_app;
-GRANT SELECT, INSERT ON gif.audit_events_2026_09 TO research_app;
-GRANT SELECT, INSERT ON gif.audit_events_2026_10 TO research_app;
-GRANT SELECT, INSERT ON gif.audit_events_2026_11 TO research_app;
-GRANT SELECT, INSERT ON gif.audit_events_2026_12 TO research_app;
-
-REVOKE UPDATE ON gif.audit_events_2026_07 FROM research_app;
-REVOKE UPDATE ON gif.audit_events_2026_08 FROM research_app;
-REVOKE UPDATE ON gif.audit_events_2026_09 FROM research_app;
-REVOKE UPDATE ON gif.audit_events_2026_10 FROM research_app;
-REVOKE UPDATE ON gif.audit_events_2026_11 FROM research_app;
-REVOKE UPDATE ON gif.audit_events_2026_12 FROM research_app;
+-- Adopter layer users (research_app, etc.) are granted access to these
+-- partitions by their own bootstrap scripts.
 
 -- RLS policies for new partitions.
 -- audit_events parent RLS policies (from migrations 002 and 005) propagate to

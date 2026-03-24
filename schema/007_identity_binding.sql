@@ -105,33 +105,18 @@ CREATE POLICY upa_consume_token_gif_app
     USING (token_consumed = false)
     WITH CHECK (token_consumed = true AND token_consumed_at IS NOT NULL);
 
--- research_app policies (mirrors gif_app — runs same enforcement engine)
-CREATE POLICY upa_select_research_app
-    ON gif.user_persona_assignments AS PERMISSIVE FOR SELECT TO research_app
-    USING (true);
-
-CREATE POLICY upa_insert_research_app
-    ON gif.user_persona_assignments AS PERMISSIVE FOR INSERT TO research_app
-    WITH CHECK (true);
-
-CREATE POLICY upa_consume_token_research_app
-    ON gif.user_persona_assignments AS PERMISSIVE FOR UPDATE TO research_app
-    USING (token_consumed = false)
-    WITH CHECK (token_consumed = true AND token_consumed_at IS NOT NULL);
-
 -- ---------------------------------------------------------------------------
 -- PART 3: Column-level UPDATE grant
 --
--- Standard table-level GRANTs for gif_app/research_app on this table are
--- SELECT, INSERT only (migration 005). Column-level UPDATE grant is required
--- for the consume operation. Restricted to the two token lifecycle columns only.
+-- Standard table-level GRANTs for gif_app on this table are SELECT, INSERT
+-- only (migration 005). Column-level UPDATE grant is required for the consume
+-- operation. Restricted to the two token lifecycle columns only.
+-- Adopter layer users (research_app, etc.) are granted equivalent access by
+-- their own bootstrap scripts.
 -- ---------------------------------------------------------------------------
 
 GRANT UPDATE (token_consumed, token_consumed_at)
     ON gif.user_persona_assignments TO gif_app;
-
-GRANT UPDATE (token_consumed, token_consumed_at)
-    ON gif.user_persona_assignments TO research_app;
 
 -- ---------------------------------------------------------------------------
 -- Verify
@@ -167,9 +152,10 @@ BEGIN
     FROM pg_policies
     WHERE schemaname = 'gif' AND tablename = 'user_persona_assignments';
 
-    -- 6 policies: SELECT/INSERT/UPDATE for gif_app + SELECT/INSERT/UPDATE for research_app
-    IF pol_count <> 6 THEN
-        RAISE EXCEPTION 'Expected 6 RLS policies on user_persona_assignments, found %', pol_count;
+    -- 3 policies: SELECT/INSERT/UPDATE for gif_app
+    -- Adopter layer users add their own policies via their bootstrap scripts
+    IF pol_count <> 3 THEN
+        RAISE EXCEPTION 'Expected 3 RLS policies on user_persona_assignments, found %', pol_count;
     END IF;
 
     RAISE NOTICE 'Migration 007 verified: % new columns, RLS enabled, % policies', col_count, pol_count;
