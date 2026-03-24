@@ -107,6 +107,7 @@ GIF_MIGRATIONS=(
     "gif/schema/007_identity_binding.sql"
     "gif/schema/008_audit_read_log.sql"
     "gif/schema/009_retention_lifecycle.sql"
+    "gif/schema/010_combination_policies.sql"
 )
 for f in "${GIF_MIGRATIONS[@]}"; do
     echo "          → $f"

@@ -37,5 +37,10 @@ export declare const gif: {
         purposeDeclared?: string;
         partitionHint?: string;
     }) => Promise<void>;
+    checkCombinationPolicies: (params: {
+        sessionId: string;
+        personaId: string;
+        incomingSourceRefs: string[];
+    }) => Promise<import("./enforcement.js").CombinationPolicyCheckResult>;
 };
 //# sourceMappingURL=enforcement_instance.d.ts.map
