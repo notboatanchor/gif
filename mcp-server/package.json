@@ -17,7 +17,7 @@
     "dev": "ts-node src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "node test_mcp.mjs && node test_sprint3.mjs && node test_sprint4.mjs"
+    "test": "node test_mcp.mjs && node test_sprint3.mjs && node test_sprint4.mjs && node test_sprint5_hash_chain.mjs && node test_sprint5_identity_binding.mjs && node test_sprint5_read_log.mjs && node test_sprint5_retention.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",

@@ -12,6 +12,7 @@ export declare const logAuditEvent: (params: {
     sourceRef?: string;
     sourcesActed?: string[];
     flagged?: boolean;
+    humanActorId?: string;
     purposeDeclared?: string;
 }) => Promise<void>;
 //# sourceMappingURL=session.d.ts.map

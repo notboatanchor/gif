@@ -20,10 +20,13 @@ export type {
   EnforcementLayer,
   PersonaValidationResult,
   PersonaInvalidReason,
+  IdentityBindingResult,
 } from './enforcement.js';
 
 // Functions — delegated to pool-bound enforcement instance
 import { gif } from './enforcement_instance.js';
 
-export const validatePersona   = gif.validatePersona;
-export const logScopeViolation = gif.logScopeViolation;
+export const validatePersona        = gif.validatePersona;
+export const logScopeViolation      = gif.logScopeViolation;
+export const verifyIdentityBinding  = gif.verifyIdentityBinding;
+export const logAuditRead           = gif.logAuditRead;

@@ -16,6 +16,7 @@ export interface ToolHandler {
     auditMetadata?: (args: Record<string, unknown>, result: ToolResult) => {
         eventType: string;
         sourceRef?: string;
+        humanActorId?: string;
     };
     skipSession?: boolean;
 }

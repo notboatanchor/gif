@@ -1,4 +1,4 @@
-export type { Persona, ScopeDefinition, PersonaStatus, GovernanceReviewStatus, EnforcementLayer, PersonaValidationResult, PersonaInvalidReason, } from './enforcement.js';
+export type { Persona, ScopeDefinition, PersonaStatus, GovernanceReviewStatus, EnforcementLayer, PersonaValidationResult, PersonaInvalidReason, IdentityBindingResult, } from './enforcement.js';
 export declare const validatePersona: (personaId: string) => Promise<import("./enforcement.js").PersonaValidationResult>;
 export declare const logScopeViolation: (params: {
     personaId: string;
@@ -7,5 +7,17 @@ export declare const logScopeViolation: (params: {
     toolName: string;
     blockedAt: import("./enforcement.js").EnforcementLayer;
     context: Record<string, unknown>;
+}) => Promise<void>;
+export declare const verifyIdentityBinding: (params: {
+    identityToken: string;
+}) => Promise<import("./enforcement.js").IdentityBindingResult>;
+export declare const logAuditRead: (params: {
+    readerPersonaId: string;
+    readerSessionId: string;
+    queriedTable: string;
+    filtersApplied?: Record<string, unknown>;
+    rowsReturned: number;
+    purposeDeclared?: string;
+    partitionHint?: string;
 }) => Promise<void>;
 //# sourceMappingURL=persona.d.ts.map

@@ -43,7 +43,7 @@ export interface ToolHandler {
   auditMetadata?: (
     args:   Record<string, unknown>,
     result: ToolResult
-  ) => { eventType: string; sourceRef?: string };
+  ) => { eventType: string; sourceRef?: string; humanActorId?: string };
 
   // If true, the tool is invoked without creating a session.
   // persona_validate is diagnostic — it should not produce audit events.

@@ -96,10 +96,12 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
         // All others emit a generic tool_call event.
         let eventType = 'tool_call';
         let sourceRef;
+        let humanActorId;
         if (toolHandler.auditMetadata && result !== undefined) {
             const meta = toolHandler.auditMetadata(args, result);
             eventType = meta.eventType;
             sourceRef = meta.sourceRef;
+            humanActorId = meta.humanActorId;
         }
         await (0, session_js_1.logAuditEvent)({
             personaId: persona_id,
@@ -108,6 +110,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             toolName: name,
             outcome: result === undefined || result.isError ? 'error' : 'success',
             sourceRef,
+            humanActorId,
             purposeDeclared: validation.persona.purpose,
         });
         await (0, session_js_1.closeSession)(sessionId);

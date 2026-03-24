@@ -37,6 +37,14 @@ export type PersonaValidationResult = {
     message: string;
 };
 export type PersonaInvalidReason = 'NOT_FOUND' | 'NOT_ACTIVE' | 'EXPIRED' | 'NOT_YET_VALID' | 'DB_ERROR';
+export type IdentityBindingResult = {
+    valid: true;
+    assignmentId: string;
+    externalUserId: string;
+} | {
+    valid: false;
+    reason: string;
+};
 export declare function createEnforcement(pool: Pool): {
     validatePersona: (personaId: string) => Promise<PersonaValidationResult>;
     createSession: (params: {
@@ -53,6 +61,7 @@ export declare function createEnforcement(pool: Pool): {
         sourceRef?: string;
         sourcesActed?: string[];
         flagged?: boolean;
+        humanActorId?: string;
         purposeDeclared?: string;
     }) => Promise<void>;
     logScopeViolation: (params: {
@@ -62,6 +71,18 @@ export declare function createEnforcement(pool: Pool): {
         toolName: string;
         blockedAt: EnforcementLayer;
         context: Record<string, unknown>;
+    }) => Promise<void>;
+    verifyIdentityBinding: (params: {
+        identityToken: string;
+    }) => Promise<IdentityBindingResult>;
+    logAuditRead: (params: {
+        readerPersonaId: string;
+        readerSessionId: string;
+        queriedTable: string;
+        filtersApplied?: Record<string, unknown>;
+        rowsReturned: number;
+        purposeDeclared?: string;
+        partitionHint?: string;
     }) => Promise<void>;
 };
 //# sourceMappingURL=enforcement.d.ts.map

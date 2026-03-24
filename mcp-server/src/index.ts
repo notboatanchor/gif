@@ -119,13 +119,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Resolve audit event type and source_ref.
     // Tools with auditMetadata control their own event classification.
     // All others emit a generic tool_call event.
-    let eventType = 'tool_call';
-    let sourceRef: string | undefined;
+    let eventType:    string           = 'tool_call';
+    let sourceRef:    string | undefined;
+    let humanActorId: string | undefined;
 
     if (toolHandler.auditMetadata && result !== undefined) {
       const meta = toolHandler.auditMetadata(args as Record<string, unknown>, result);
-      eventType = meta.eventType;
-      sourceRef = meta.sourceRef;
+      eventType    = meta.eventType;
+      sourceRef    = meta.sourceRef;
+      humanActorId = meta.humanActorId;
     }
 
     await logAuditEvent({
@@ -135,6 +137,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       toolName:        name,
       outcome:         result === undefined || result.isError ? 'error' : 'success',
       sourceRef,
+      humanActorId,
       purposeDeclared: validation.persona.purpose,
     });
     await closeSession(sessionId);
