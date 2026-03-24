@@ -45,6 +45,17 @@ export type IdentityBindingResult = {
     valid: false;
     reason: string;
 };
+export type EnforcementAction = 'block' | 'flag' | 'require_human_review';
+export type CombinationPolicyCheckResult = {
+    triggered: false;
+} | {
+    triggered: true;
+    policyId: string;
+    policyName: string;
+    enforcementAction: EnforcementAction;
+    sensitivityResult: string;
+    exempt: boolean;
+};
 export declare function createEnforcement(pool: Pool): {
     validatePersona: (personaId: string) => Promise<PersonaValidationResult>;
     createSession: (params: {
@@ -84,5 +95,10 @@ export declare function createEnforcement(pool: Pool): {
         purposeDeclared?: string;
         partitionHint?: string;
     }) => Promise<void>;
+    checkCombinationPolicies: (params: {
+        sessionId: string;
+        personaId: string;
+        incomingSourceRefs: string[];
+    }) => Promise<CombinationPolicyCheckResult>;
 };
 //# sourceMappingURL=enforcement.d.ts.map

@@ -39,6 +39,24 @@ function createEnforcement(pool) {
         logScopeViolation: (params) => _logScopeViolation(pool, params),
         verifyIdentityBinding: (params) => _verifyIdentityBinding(pool, params),
         logAuditRead: (params) => _logAuditRead(pool, params),
+        // -----------------------------------------------------------------------
+        // checkCombinationPolicies()
+        // Call before tool execution when a tool declares source refs.
+        // Builds candidate set = {session sources so far} ∪ {incomingSourceRefs},
+        // then evaluates all active combination policies (ADR-023).
+        //
+        // Returns:
+        //   { triggered: false }                   — no policy fires, proceed
+        //   { triggered: true, exempt: true, ... } — policy fires but persona is
+        //                                            exempt; proceed with flagged
+        //                                            audit event
+        //   { triggered: true, exempt: false, ... } — policy fires; apply
+        //                                             enforcementAction (block, etc.)
+        //
+        // Does NOT throw. Fails-closed on DB error (returns a synthetic blocked
+        // result) so a broken policy table does not silently allow combinations.
+        // -----------------------------------------------------------------------
+        checkCombinationPolicies: (params) => _checkCombinationPolicies(pool, params),
     };
 }
 // ---------------------------------------------------------------------------
@@ -294,6 +312,78 @@ async function _logAuditRead(pool, params) {
     catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[gif-enforcement] Failed to log audit read for persona ${params.readerPersonaId}:`, message);
+    }
+}
+// ---------------------------------------------------------------------------
+// _checkCombinationPolicies()
+// Pre-execution aggregation risk check (ADR-023).
+//
+// Builds candidate set = {sources already touched this session} ∪ {incomingSourceRefs}.
+// If any active policy's source_set ⊆ candidate set, the policy fires.
+//
+// Does NOT throw. Fails-closed on DB error — a broken policy table must not
+// silently allow sensitive combinations through.
+// ---------------------------------------------------------------------------
+async function _checkCombinationPolicies(pool, params) {
+    const { sessionId, personaId, incomingSourceRefs } = params;
+    // No sources declared — nothing to check
+    if (incomingSourceRefs.length === 0) {
+        return { triggered: false };
+    }
+    // No session — skip (persona_validate and other skipSession tools)
+    if (!sessionId) {
+        return { triggered: false };
+    }
+    try {
+        // Step 1: Accumulate sources already touched in this session
+        const sessionResult = await pool.query(`SELECT array_agg(DISTINCT elem) AS sources
+         FROM gif.audit_events ae,
+              jsonb_array_elements_text(ae.sources_touched) elem
+        WHERE ae.session_id = $1
+          AND ae.persona_id = $2
+          AND ae.sources_touched IS NOT NULL
+          AND jsonb_array_length(ae.sources_touched) > 0`, [sessionId, personaId]);
+        const sessionSources = new Set(sessionResult.rows[0]?.sources ?? []);
+        // Step 2: Add incoming sources to form the candidate set
+        for (const s of incomingSourceRefs) {
+            sessionSources.add(s);
+        }
+        // Step 3: Load active policies
+        const policiesResult = await pool.query(`SELECT policy_id, policy_name, source_set, sensitivity_result,
+              enforcement_action, exempt_persona_ids
+         FROM gif.combination_policies
+        WHERE active = true`);
+        // Step 4: Evaluate each policy — fire on first match
+        for (const policy of policiesResult.rows) {
+            const policySet = policy.source_set;
+            const allPresent = policySet.every(s => sessionSources.has(s));
+            if (!allPresent)
+                continue;
+            const exempt = policy.exempt_persona_ids.includes(personaId);
+            return {
+                triggered: true,
+                policyId: policy.policy_id,
+                policyName: policy.policy_name,
+                enforcementAction: policy.enforcement_action,
+                sensitivityResult: policy.sensitivity_result,
+                exempt,
+            };
+        }
+        return { triggered: false };
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[gif-enforcement] Combination policy check failed — failing closed:', message);
+        // Fail-closed: return a synthetic block result so a DB error does not
+        // silently allow a sensitive combination through.
+        return {
+            triggered: true,
+            policyId: 'error',
+            policyName: 'policy-check-error',
+            enforcementAction: 'block',
+            sensitivityResult: 'restricted',
+            exempt: false,
+        };
     }
 }
 // ---------------------------------------------------------------------------

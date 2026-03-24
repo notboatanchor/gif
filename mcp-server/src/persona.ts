@@ -21,6 +21,8 @@ export type {
   PersonaValidationResult,
   PersonaInvalidReason,
   IdentityBindingResult,
+  EnforcementAction,
+  CombinationPolicyCheckResult,
 } from './enforcement.js';
 
 // Functions — delegated to pool-bound enforcement instance
