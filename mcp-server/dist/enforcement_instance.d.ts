@@ -14,6 +14,7 @@ export declare const gif: {
         sourceRef?: string;
         sourcesActed?: string[];
         flagged?: boolean;
+        humanActorId?: string;
         purposeDeclared?: string;
     }) => Promise<void>;
     logScopeViolation: (params: {
@@ -23,6 +24,18 @@ export declare const gif: {
         toolName: string;
         blockedAt: import("./enforcement.js").EnforcementLayer;
         context: Record<string, unknown>;
+    }) => Promise<void>;
+    verifyIdentityBinding: (params: {
+        identityToken: string;
+    }) => Promise<import("./enforcement.js").IdentityBindingResult>;
+    logAuditRead: (params: {
+        readerPersonaId: string;
+        readerSessionId: string;
+        queriedTable: string;
+        filtersApplied?: Record<string, unknown>;
+        rowsReturned: number;
+        purposeDeclared?: string;
+        partitionHint?: string;
     }) => Promise<void>;
 };
 //# sourceMappingURL=enforcement_instance.d.ts.map

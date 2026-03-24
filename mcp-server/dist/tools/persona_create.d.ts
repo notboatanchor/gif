@@ -10,6 +10,7 @@ export interface PersonaCreateArgs {
     valid_from?: string;
     max_delegation_depth?: number;
     parent_persona_id?: string;
+    identity_token?: string;
 }
 export declare function executePersonaCreate(args: PersonaCreateArgs, persona: Persona, sessionId: string): Promise<{
     content: Array<{

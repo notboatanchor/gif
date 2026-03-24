@@ -15,7 +15,7 @@
 // =============================================================================
 
 import pool from '../db.js';
-import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
+import { Persona, logScopeViolation, logAuditRead, EnforcementLayer } from '../persona.js';
 import type { ToolHandler } from './types.js';
 
 // ----------------------------------------------------------------------------
@@ -44,6 +44,17 @@ const ALLOWED_READ_TABLES = new Set([
   'tool_registry',
   'user_persona_assignments',
   'erasure_log',
+  'audit_chain_anchors',   // Sprint 5: hash chain anchor table
+  'retention_holds',       // Sprint 5: legal hold table
+]);
+
+// Tables whose reads are logged to audit_read_log (Sprint 5 — chain of custody)
+const AUDIT_CLASS_TABLES = new Set([
+  'audit_events',
+  'scope_violations',
+  'revocation_log',
+  'erasure_log',
+  'audit_chain_anchors',
 ]);
 
 // ----------------------------------------------------------------------------
@@ -151,6 +162,19 @@ export async function executeDbRead(
 
   try {
     const result = await pool.query(query, [...filterValues, limit]);
+
+    // Log reads against audit-class tables for chain-of-custody (Sprint 5).
+    // Fire-and-forget: failure must not mask the read response.
+    if (AUDIT_CLASS_TABLES.has(table)) {
+      void logAuditRead({
+        readerPersonaId:  persona.persona_id,
+        readerSessionId:  sessionId,
+        queriedTable:     table,
+        filtersApplied:   Object.keys(parsedFilters).length > 0 ? parsedFilters : undefined,
+        rowsReturned:     result.rows.length,
+        purposeDeclared:  persona.purpose,
+      });
+    }
 
     return {
       content: [{ type: 'text', text: JSON.stringify({

@@ -25,11 +25,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
 const { Pool } = pg;
 
-const personaId = process.argv[2];
-if (!personaId) {
-  console.error('[sprint3] Usage: node test_sprint3.mjs <persona_id>');
-  process.exit(1);
-}
+const personaIdArg = process.argv[2];
 
 // ---------------------------------------------------------------------------
 // Postgres connection — connects as gif_app (application user)
@@ -38,7 +34,7 @@ if (!personaId) {
 const pool = new Pool({
   host:     process.env.PGHOST     || 'localhost',
   port:     parseInt(process.env.PGPORT || '5432'),
-  database: process.env.PGDATABASE || 'gif_research',
+  database: process.env.PGDATABASE || 'gif',
   user:     process.env.PGUSER     || 'gif_app',
   password: process.env.PGPASSWORD,
 });
@@ -54,6 +50,20 @@ function pass(label) {
 function fail(label, detail) {
   console.error(`  [FAIL] ${label}${detail ? ': ' + detail : ''}`);
   failed++;
+}
+
+// Auto-discover persona if not provided as argument (for npm test compatibility)
+let personaId = personaIdArg;
+if (!personaId) {
+  const r = await pool.query(
+    `SELECT persona_id FROM gif.personas WHERE status = 'active' LIMIT 1`
+  );
+  if (r.rows.length === 0) {
+    console.error('[sprint3] No active persona found — run earlier sprint tests first');
+    await pool.end();
+    process.exit(1);
+  }
+  personaId = r.rows[0].persona_id;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +250,7 @@ const recentAuditEvent = await pool.query(
   `SELECT purpose_declared, outcome FROM audit_events
    WHERE persona_id = $1
      AND event_type = 'tool_call'
+     AND occurred_at <= now()
    ORDER BY occurred_at DESC
    LIMIT 1`,
   [personaId]
