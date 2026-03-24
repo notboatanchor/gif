@@ -70,7 +70,9 @@ COMMENT ON ROLE gif_app IS
 -- without requiring superuser for subsequent operations.
 -- ---------------------------------------------------------------------------
 
-ALTER DATABASE gif OWNER TO gif_admin;
+DO $$ BEGIN
+    EXECUTE format('ALTER DATABASE %I OWNER TO gif_admin', current_database());
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Schemas
@@ -101,7 +103,9 @@ ALTER ROLE gif_app   SET search_path = gif;
 -- Connection and schema access grants
 -- ---------------------------------------------------------------------------
 
-GRANT CONNECT ON DATABASE gif TO gif_app;
+DO $$ BEGIN
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO gif_app', current_database());
+END $$;
 GRANT USAGE   ON SCHEMA gif   TO gif_app;
 
 -- ---------------------------------------------------------------------------
