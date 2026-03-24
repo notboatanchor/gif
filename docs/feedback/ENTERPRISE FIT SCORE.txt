@@ -1,0 +1,79 @@
+ENTERPRISE FIT SCORE: 3/10
+Budget & Champion
+This doesn't have a budget owner in my org — it's stuck between three fiefdoms that don't talk to each other.
+
+**Security** doesn't own AI governance because we don't control the AI deployments. We own identity (Okta), PAM (CyberArk), and IGA (SailPoint), but AI projects report through Digital Innovation or Engineering. When I try to assert control over AI tooling, I get "this is application logic, not security infrastructure."
+
+**IT/Engineering** owns the AI pilots, but they think of governance as a compliance checkbox, not infrastructure. They'll say "we log everything to our SIEM" and consider it handled. They have budget for AI features, not AI governance substrate.
+
+**Compliance/Legal** cares desperately about this problem but has no budget and no technical authority. They write policies that Engineering ignores because there's no enforcement mechanism. They'd love GIF in theory but can't sponsor a six-figure infrastructure purchase.
+
+My champion problem is worse: the person who understands this deeply enough to push it through is either a Staff+ engineer who has no budget authority, or a Compliance VP who has budget but can't evaluate the technical claims. If I find someone who gets both — they leave for a startup in 18 months and I'm stuck with infrastructure nobody else understands.
+
+**Rip-and-replace or net-new?** You're claiming this is net-new — sits between the AI and tools, doesn't replace existing IAM. But that's the problem. I already have four overlapping identity systems. Adding a fifth "AI-specific" layer that doesn't integrate with my existing stack means I now have *two* sources of truth for who can do what. When SailPoint says a contractor's access expired but GIF's persona is still active, who wins? You don't integrate with my IGA — you're a parallel universe.
+
+Stack Integration Reality
+You sit at the MCP layer. I had to Google what MCP is. That's not a good sign.
+
+Model Context Protocol is an Anthropic standard from 2024. Adoption outside Anthropic's ecosystem is speculative. If I'm building on OpenAI, Google, or AWS Bedrock, does MCP even exist in my stack? You're betting the enforcement architecture on a protocol that might be Anthropic-only. If I have to rewrite my AI integrations to support MCP just to get governance, that's not "additive" — that's rearchitecture with vendor lock-in.
+
+**Where you claim to sit:** Between the AI model and tool execution, enforcing before dispatch.
+
+**Where you actually sit in my environment:** Nowhere, unless I refactor every AI integration to route through MCP servers that I now have to run, manage, patch, and scale. You're not a plugin to my existing stack — you're a *new required layer* that my AI apps have to be rewritten to support.
+
+**Integration lift in 90 days:**
+
+Stand up MCP infrastructure (new)
+Redeploy AI apps to route tool calls through MCP (rearchitecture)
+Migrate tool definitions into your registry (rewrite)
+Define personas and map them to existing identity sources (net new governance model)
+Train my AI/ML engineers on a governance framework they didn't budget time for
+**What breaks if integration fails:** Everything. You're in the critical path of every AI tool call. If your enforcement layer goes down, my AI apps stop working. I don't have a fallback. You've introduced a single point of failure into a system that was working without you.
+
+You claim schema isolation and per-adopter credentials, but I don't have "adopters" — I have 40+ internal AI projects across Engineering, Finance, Legal, and HR. Do I run 40 separate GIF deployments? One shared instance with 40 tenant schemas? You don't describe the multi-tenant operational model for an enterprise with dozens of AI workstreams. This sounds like it was built for one team with one AI project.
+
+Procurement & Vendor Risk
+**What I need to see:**
+
+SOC 2 Type II (you don't have it — "encryption at rest deferred until first customer" means you've never been audited)
+ISO 27001 (you don't claim it)
+Data residency attestation (you claim on-prem deployment, but what's your support model? Do your engineers SSH into my environment? That's a data exfiltration path.)
+Vendor financial stability (you're pre-revenue, probably pre-seed or seed stage, which means 60% chance you don't exist in 3 years)
+Liability insurance for AI governance failures (you don't mention it, which means you don't carry it)
+Escrow agreement for source code (if you fold, can I keep running this, or am I dead in the water?)
+**Realistic timeline:**
+
+**Week 1-4:** Initial security review flags missing SOC 2, kicks to extended vendor risk process
+**Week 5-12:** Legal reviews your license model (what does "infrastructure-as-dependency" mean contractually? Do you have audit rights into my usage? What are the liability caps?)
+**Week 13-18:** InfoSec red team reviews the claim that audit logs are structurally immutable (they'll want to pentest it, you'll want to say no because you're not ready)
+**Week 19-24:** Data Privacy reviews what PII might flow through personas and audit logs (GDPR right-to-deletion conflicts with "immutable audit trail")
+**Week 25+:** Assuming no blocking issues, we're at contract negotiation
+**Most likely blocker:** You claim the audit trail is INSERT-only at the database permission level and that "no application credential can UPDATE or DELETE." My InfoSec team will test that. If they find *any* path to mutate the audit log — a Postgres superuser, a backup-restore cycle that re-timestamps records, a schema migration that rebuilds the table — your core claim collapses. And you've built your entire moat on that claim.
+
+Second most likely blocker: Your MCP dependency. If MCP doesn't become a cross-vendor standard, I'm locked into Anthropic's ecosystem or I'm running unsupported forks. That's vendor risk my procurement team won't accept.
+
+The 3 Questions I Ask In Every First Meeting
+**1. You enforce at MCP, but most enterprise AI tools don't use MCP — they call APIs directly. What happens when my AI app calls the Salesforce API, the ServiceNow API, or a custom internal microservice? Does GIF even see those calls?**
+
+Your enforcement model assumes all tools are registered in your tool registry and invoked through MCP. In reality, enterprise AI apps call dozens of external SaaS APIs and internal services directly via HTTP/REST. Those calls never touch MCP. They bypass your enforcement entirely. You've built governance for a theoretical AI architecture, not the messy reality of how enterprises actually build AI tooling.
+
+If your answer is "adopters need to wrap those API calls as MCP tools," you just admitted this requires rearchitecting every AI integration. That's not infrastructure — that's a rewrite project.
+
+**2. You claim structural immutability via INSERT-only permissions, but Postgres superusers can ALTER TABLE, DROP TABLE, and pg_dump/pg_restore can reconstruct history. How do you prevent a compromised superuser or a motivated DBA from rewriting the audit log?**
+
+This is the core of your moat and I don't believe it survives real-world operational requirements. When I need to migrate databases, patch Postgres, recover from corruption, or respond to a ransomware incident, I'm using superuser credentials and backup tooling. If any of those paths allow audit log mutation — even unintentionally — your "structural guarantee" is a policy, not a structure.
+
+What I need to hear: cryptographic signing of each audit record with tamper-evident logs published to an external witness (e.g., append-only S3 with object lock, or a blockchain-style commitment). INSERT-only permissions are not sufficient.
+
+**3. When a persona is revoked, you claim all active sessions terminate atomically. How does that work when the AI agent is mid-execution inside a tool that takes 30 seconds to complete — do you kill the process, let it finish, or leave it in an undefined state?**
+
+Session termination sounds clean in theory. In practice, if an AI agent is halfway through writing data to a database, calling an external API, or processing a file, and I revoke the persona, what happens? If you kill the process, I've got partial writes and data corruption. If you let it finish, the "atomic revocation" isn't atomic. If you leave it undefined, I've got a governance gap.
+
+This is the kind of edge case that every IAM vendor handwaves until it causes a production incident. I need to know you've thought through the state machine.
+
+BUY / PILOT / PASS Recommendation
+**PASS.**
+
+This is elegant infrastructure for an AI deployment model that doesn't exist in my enterprise yet. You've built governance for AI agents that autonomously spawn sub-agents and make complex tool-chaining decisions — but my AI projects are still using LLMs to summarize documents and draft emails. The sophistication gap between what you govern and what I'm actually running is 2-3 years.
+
+To move this to PILOT: (1) Prove MCP has cross-vendor adoption or build enforcement hooks for direct API calls, (2) get SOC 2 Type II and demonstrate the audit immutability claim survives a red team engagement, (3) show me three enterprise reference customers running this in production at scale, and (4) build an integration path to SailPoint so this isn't a parallel identity universe. Until then, you're a solution in search of a problem I don't have yet — and by the time I do, you might not exist.
