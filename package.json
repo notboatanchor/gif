@@ -1,0 +1,19 @@
+{
+  "name": "gif-enforcement",
+  "version": "0.1.0",
+  "description": "GIF enforcement package — persona-based permissions and audit trail for AI tool interfaces",
+  "main": "mcp-server/dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./mcp-server/dist/enforcement.js",
+      "require": "./mcp-server/dist/enforcement.js",
+      "types": "./mcp-server/dist/enforcement.d.ts"
+    }
+  },
+  "types": "mcp-server/dist/enforcement.d.ts",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "pg": "^8.11.3",
+    "zod": "^3.22.4"
+  }
+}
