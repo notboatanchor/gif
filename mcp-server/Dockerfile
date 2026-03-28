@@ -1,9 +1,9 @@
 # /gif/mcp-server/Dockerfile
-# MCP server — Node.js 20 / TypeScript (ADR-019)
+# MCP server — Node.js 22 / TypeScript (ADR-019, upgraded from 20 — Node 20 EOL Apr 2026)
 # Development image. Bind mount overlays source at runtime.
 # For production: remove bind mount, bake source into image at build time.
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Set working directory inside container
 WORKDIR /app
