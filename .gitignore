@@ -9,3 +9,13 @@ mcp-server/node_modules/
 
 # OS
 .DS_Store
+
+# Claude Code — local settings and runtime data (not for contributors)
+.claude/settings.local.json
+.claude/evals/*.log
+.claude/evals/baseline.json
+.claude/memory/
+.claude/homunculus/
+
+# Internal session state — not for public repository
+project-state.md
