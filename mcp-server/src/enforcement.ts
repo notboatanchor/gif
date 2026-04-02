@@ -257,7 +257,7 @@ async function _validatePersona(
 
   const now = new Date();
 
-  if (persona.valid_from && persona.valid_from > now) {
+  if (persona.valid_from > now) {
     return {
       valid:   false,
       reason:  'NOT_YET_VALID',

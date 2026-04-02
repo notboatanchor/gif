@@ -22,6 +22,7 @@ import type { ToolHandler } from './types.js';
 // Returns the persona details in a consistent format.
 // ----------------------------------------------------------------------------
 
+// eslint-disable-next-line @typescript-eslint/require-await -- ToolHandler.execute must return Promise<ToolResult>; this implementation is synchronous but the interface contract requires async.
 export async function executePersonaValidate(
   _args:     Record<string, unknown>,
   persona:   Persona,

@@ -121,7 +121,7 @@ export async function executeWebSearch(
     });
 
     if (!response.ok) {
-      throw new Error(`SearXNG returned HTTP ${response.status}`);
+      throw new Error(`SearXNG returned HTTP ${String(response.status)}`);
     }
 
     searxngData = await response.json() as SearXNGResponse;

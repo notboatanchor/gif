@@ -40,6 +40,7 @@ const PORT = parseInt(process.env.PORT || '3100');
 // MCP server instance
 // ----------------------------------------------------------------------------
 
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
 const server = new Server(
   { name: 'gif-mcp-server', version: '0.1.0' },
   { capabilities: { tools: {} } }
@@ -49,13 +50,14 @@ const server = new Server(
 // Active SSE transports — keyed by sessionId
 // ----------------------------------------------------------------------------
 
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
 const transports = new Map<string, SSEServerTransport>();
 
 // ----------------------------------------------------------------------------
 // ListTools — derived from registry, no hardcoded definitions
 // ----------------------------------------------------------------------------
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+server.setRequestHandler(ListToolsRequestSchema, () => ({
   tools: Array.from(TOOL_REGISTRY.values()).map(h => h.definition),
 }));
 
@@ -93,7 +95,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // skipSession tools (persona_validate) — execute directly, no session or audit
   if (toolHandler.skipSession) {
-    return toolHandler.execute(args as Record<string, unknown>, validation.persona, '');
+    return toolHandler.execute(args, validation.persona, '');
   }
 
   // All other tools — create session, execute, audit, close session
@@ -110,11 +112,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   let result: Awaited<ReturnType<typeof toolHandler.execute>> | undefined;
 
   try {
-    result = await toolHandler.execute(
-      args as Record<string, unknown>,
-      validation.persona,
-      sessionId
-    );
+    result = await toolHandler.execute(args, validation.persona, sessionId);
   } finally {
     // Resolve audit event type and source_ref.
     // Tools with auditMetadata control their own event classification.
@@ -124,7 +122,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let humanActorId: string | undefined;
 
     if (toolHandler.auditMetadata && result !== undefined) {
-      const meta = toolHandler.auditMetadata(args as Record<string, unknown>, result);
+      const meta = toolHandler.auditMetadata(args, result);
       eventType    = meta.eventType;
       sourceRef    = meta.sourceRef;
       humanActorId = meta.humanActorId;
@@ -147,12 +145,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 // ----------------------------------------------------------------------------
-// HTTP server and SSE transport
+// HTTP request handler (async) — extracted so the createServer callback
+// remains synchronous, satisfying TypeScript's void-return expectation.
 // ----------------------------------------------------------------------------
 
-const httpServer = http.createServer(async (req, res) => {
+async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 
-  console.log(`[server] ${req.method} ${req.url}`);
+  console.log(`[server] ${req.method ?? ''} ${req.url ?? ''}`);
 
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -161,6 +160,7 @@ const httpServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/sse') {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
     const transport = new SSEServerTransport('/message', res);
 
     transports.set(transport.sessionId, transport);
@@ -176,7 +176,7 @@ const httpServer = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url?.startsWith('/message')) {
-    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const url = new URL(req.url, `http://localhost:${String(PORT)}`);
     const sessionId = url.searchParams.get('sessionId');
 
     if (!sessionId) {
@@ -199,12 +199,26 @@ const httpServer = http.createServer(async (req, res) => {
 
   res.writeHead(404);
   res.end();
+}
+
+// ----------------------------------------------------------------------------
+// HTTP server and SSE transport
+// ----------------------------------------------------------------------------
+
+const httpServer = http.createServer((req, res) => {
+  handleRequest(req, res).catch((err: unknown) => {
+    console.error('[server] Unhandled request error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500);
+      res.end();
+    }
+  });
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`[server] GIF MCP server running on port ${PORT}`);
-  console.log(`[server] Health: http://localhost:${PORT}/health`);
-  console.log(`[server] SSE:    http://localhost:${PORT}/sse`);
+  console.log(`[server] GIF MCP server running on port ${String(PORT)}`);
+  console.log(`[server] Health: http://localhost:${String(PORT)}/health`);
+  console.log(`[server] SSE:    http://localhost:${String(PORT)}/sse`);
   console.log(`[server] Tools registered: ${Array.from(TOOL_REGISTRY.keys()).join(', ')}`);
 });
 

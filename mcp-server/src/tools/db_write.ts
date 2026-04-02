@@ -112,7 +112,7 @@ export async function executeDbWrite(
   // Parse record JSON string
   let parsedRecord: Record<string, unknown>;
   try {
-    parsedRecord = JSON.parse(record);
+    parsedRecord = JSON.parse(record) as Record<string, unknown>;
   } catch {
     return {
       content: [{ type: 'text', text: JSON.stringify({
@@ -134,7 +134,7 @@ export async function executeDbWrite(
   // Table name validated against allowlist — safe to interpolate.
   // Column names are quoted. Values are parameterized.
   const columnList = columns.map(c => `"${c}"`).join(', ');
-  const valuePlaceholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+  const valuePlaceholders = columns.map((_, i) => `$${String(i + 1)}`).join(', ');
   const values = columns.map(c => parsedRecord[c]);
 
   const query = `
@@ -149,7 +149,7 @@ export async function executeDbWrite(
     return {
       content: [{ type: 'text', text: JSON.stringify({
         table,
-        inserted: result.rows[0],
+        inserted: result.rows[0] as Record<string, unknown>,
       }) }],
     };
 

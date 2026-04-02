@@ -135,7 +135,7 @@ export async function executeDbRead(
   let parsedFilters: Record<string, unknown> = {};
   if (filters) {
     try {
-      parsedFilters = JSON.parse(filters);
+      parsedFilters = JSON.parse(filters) as Record<string, unknown>;
     } catch {
       return {
         content: [{ type: 'text', text: JSON.stringify({
@@ -150,14 +150,14 @@ export async function executeDbRead(
   // Table name is validated against allowlist above — safe to interpolate.
   // Filter values are parameterized — no SQL injection possible.
   const filterKeys = Object.keys(parsedFilters);
-  const whereClauses = filterKeys.map((key, i) => `"${key}" = $${i + 1}`);
+  const whereClauses = filterKeys.map((key, i) => `"${key}" = $${String(i + 1)}`);
   const whereString = whereClauses.length > 0
     ? `WHERE ${whereClauses.join(' AND ')}`
     : '';
   const filterValues = filterKeys.map(key => parsedFilters[key]);
 
   // Append limit as the last parameter
-  const limitParam = `$${filterValues.length + 1}`;
+  const limitParam = `$${String(filterValues.length + 1)}`;
   const query = `SELECT * FROM "${table}" ${whereString} LIMIT ${limitParam}`;
 
   try {
