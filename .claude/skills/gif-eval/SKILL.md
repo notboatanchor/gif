@@ -92,7 +92,7 @@ Write this BEFORE implementing:
 ## Eval Storage
 
 ```
-gif-stack/gif/.claude/evals/
+gif/.claude/evals/
   [tool-name].md        # Eval definition
   [tool-name].log       # Run history with timestamps
   baseline.json         # Regression baselines per tool

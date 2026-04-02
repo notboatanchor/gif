@@ -1,6 +1,6 @@
 ---
 name: verification-loop
-description: Comprehensive build/type/lint/test verification for gif-stack. Run after any non-trivial change before committing. Catches regressions early.
+description: Comprehensive build/type/lint/test verification for gif. Run after any non-trivial change before committing. Catches regressions early.
 origin: ECC
 ---
 
