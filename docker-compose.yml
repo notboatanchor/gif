@@ -1,0 +1,56 @@
+# gif — Docker Compose
+# Standalone development environment: PostgreSQL + GIF MCP server.
+# Initializes the gif database automatically on first run (empty volume).
+#
+# Quick start:
+#   cp .env.example .env        # fill in passwords
+#   docker compose up -d
+#
+# Run integration tests (from mcp-server/ with .env sourced):
+#   export $(grep -v '^#' ../.env | xargs)
+#   PGADMINPASSWORD=$GIF_ADMIN_PASSWORD npm test
+#
+# Reset database (destructive — drops all data):
+#   docker compose down -v && docker compose up -d
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB:         ${PGDATABASE:-gif}
+      POSTGRES_PASSWORD:   ${POSTGRES_PASSWORD}
+      GIF_ADMIN_PASSWORD:  ${GIF_ADMIN_PASSWORD}
+      GIF_APP_PASSWORD:    ${GIF_APP_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/docker/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ./schema:/schema:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${PGDATABASE:-gif}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    environment:
+      PGHOST:               postgres
+      PGPORT:               5432
+      PGDATABASE:           ${PGDATABASE:-gif}
+      PGUSER:               gif_app
+      PGPASSWORD:           ${GIF_APP_PASSWORD}
+      PORT:                 ${PORT:-3100}
+      IDENTITY_HMAC_SECRET: ${IDENTITY_HMAC_SECRET}
+    ports:
+      - "${PORT:-3100}:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
