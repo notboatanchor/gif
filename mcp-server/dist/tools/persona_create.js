@@ -171,7 +171,7 @@ async function executePersonaCreate(args, persona, sessionId) {
             });
             return {
                 content: [{ type: 'text', text: JSON.stringify({
-                            error: `Delegation depth ${delegationDepth} exceeds parent max_delegation_depth ${parentPersona.max_delegation_depth}`,
+                            error: `Delegation depth ${String(delegationDepth)} exceeds parent max_delegation_depth ${String(parentPersona.max_delegation_depth)}`,
                         }) }],
                 isError: true,
             };

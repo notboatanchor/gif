@@ -21,6 +21,7 @@ exports.executePersonaValidate = executePersonaValidate;
 // Called only after the enforcement engine has already validated the persona.
 // Returns the persona details in a consistent format.
 // ----------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/require-await -- ToolHandler.execute must return Promise<ToolResult>; this implementation is synchronous but the interface contract requires async.
 async function executePersonaValidate(_args, persona, _sessionId) {
     return {
         content: [{

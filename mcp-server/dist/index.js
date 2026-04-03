@@ -36,15 +36,17 @@ const PORT = parseInt(process.env.PORT || '3100');
 // ----------------------------------------------------------------------------
 // MCP server instance
 // ----------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
 const server = new index_js_1.Server({ name: 'gif-mcp-server', version: '0.1.0' }, { capabilities: { tools: {} } });
 // ----------------------------------------------------------------------------
 // Active SSE transports — keyed by sessionId
 // ----------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
 const transports = new Map();
 // ----------------------------------------------------------------------------
 // ListTools — derived from registry, no hardcoded definitions
 // ----------------------------------------------------------------------------
-server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
+server.setRequestHandler(types_js_1.ListToolsRequestSchema, () => ({
     tools: Array.from(registry_js_1.TOOL_REGISTRY.values()).map(h => h.definition),
 }));
 // ----------------------------------------------------------------------------
@@ -118,16 +120,18 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     return result;
 });
 // ----------------------------------------------------------------------------
-// HTTP server and SSE transport
+// HTTP request handler (async) — extracted so the createServer callback
+// remains synchronous, satisfying TypeScript's void-return expectation.
 // ----------------------------------------------------------------------------
-const httpServer = http_1.default.createServer(async (req, res) => {
-    console.log(`[server] ${req.method} ${req.url}`);
+async function handleRequest(req, res) {
+    console.log(`[server] ${req.method ?? ''} ${req.url ?? ''}`);
     if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', service: 'gif-mcp-server' }));
         return;
     }
     if (req.method === 'GET' && req.url === '/sse') {
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
         const transport = new sse_js_1.SSEServerTransport('/message', res);
         transports.set(transport.sessionId, transport);
         transport.onclose = () => {
@@ -139,7 +143,7 @@ const httpServer = http_1.default.createServer(async (req, res) => {
         return;
     }
     if (req.method === 'POST' && req.url?.startsWith('/message')) {
-        const url = new URL(req.url, `http://localhost:${PORT}`);
+        const url = new URL(req.url, `http://localhost:${String(PORT)}`);
         const sessionId = url.searchParams.get('sessionId');
         if (!sessionId) {
             res.writeHead(400);
@@ -157,11 +161,23 @@ const httpServer = http_1.default.createServer(async (req, res) => {
     }
     res.writeHead(404);
     res.end();
+}
+// ----------------------------------------------------------------------------
+// HTTP server and SSE transport
+// ----------------------------------------------------------------------------
+const httpServer = http_1.default.createServer((req, res) => {
+    handleRequest(req, res).catch((err) => {
+        console.error('[server] Unhandled request error:', err);
+        if (!res.headersSent) {
+            res.writeHead(500);
+            res.end();
+        }
+    });
 });
 httpServer.listen(PORT, () => {
-    console.log(`[server] GIF MCP server running on port ${PORT}`);
-    console.log(`[server] Health: http://localhost:${PORT}/health`);
-    console.log(`[server] SSE:    http://localhost:${PORT}/sse`);
+    console.log(`[server] GIF MCP server running on port ${String(PORT)}`);
+    console.log(`[server] Health: http://localhost:${String(PORT)}/health`);
+    console.log(`[server] SSE:    http://localhost:${String(PORT)}/sse`);
     console.log(`[server] Tools registered: ${Array.from(registry_js_1.TOOL_REGISTRY.keys()).join(', ')}`);
 });
 process.on('SIGTERM', () => {

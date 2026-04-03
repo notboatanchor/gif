@@ -66,7 +66,7 @@ async function executeWebSearch(args, persona, sessionId) {
             signal: AbortSignal.timeout(15000),
         });
         if (!response.ok) {
-            throw new Error(`SearXNG returned HTTP ${response.status}`);
+            throw new Error(`SearXNG returned HTTP ${String(response.status)}`);
         }
         searxngData = await response.json();
     }
