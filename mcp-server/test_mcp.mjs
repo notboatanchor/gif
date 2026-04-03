@@ -1,35 +1,72 @@
+// test_mcp.mjs
+// =============================================================================
+// MCP server end-to-end test — connects via SSE, exercises web_search and db_read.
+//
+// Discovers the test persona dynamically (same pattern as test_sprint4.mjs).
+// Requires: MCP server running on port 3100, test_setup.mjs run first.
+// =============================================================================
+
+import pg from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+
+const { Pool } = pg;
+
+// Discover persona from DB — must have read + search scope
+const pool = new Pool({
+  host:     process.env.PGHOST     || 'localhost',
+  port:     parseInt(process.env.PGPORT || '5432'),
+  user:     process.env.PGUSER     || 'gif_app',
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE || 'gif',
+});
+
+const row = await pool.query(
+  `SELECT persona_id FROM gif.personas
+   WHERE status = 'active'
+     AND scope_definition->'permitted_actions' ? 'read'
+     AND scope_definition->'permitted_actions' ? 'search'
+   LIMIT 1`
+);
+await pool.end();
+
+if (row.rows.length === 0) {
+  console.error('[test_mcp] No active persona with read+search scope — run test_setup.mjs first');
+  process.exit(1);
+}
+
+const PERSONA_ID = row.rows[0].persona_id;
+console.log(`[test_mcp] Using persona: ${PERSONA_ID}`);
 
 const transport = new SSEClientTransport(new URL('http://localhost:3100/sse'));
 const client = new Client({ name: 'test-client', version: '0.1.0' }, { capabilities: {} });
 
 await client.connect(transport);
-console.log('[test] Connected');
+console.log('[test_mcp] Connected');
 
 // Test 1: web_search
-console.log('[test] Calling web_search...');
+console.log('[test_mcp] Calling web_search...');
 const searchResult = await client.callTool({
   name: 'web_search',
   arguments: {
-    persona_id: 'd5465a85-e04b-48ab-a8ac-ba5c6904ca2e',
-    query: 'federal contracting news',
+    persona_id: PERSONA_ID,
+    query:      'federal contracting news',
     max_results: 3,
   },
 });
-console.log('[test] web_search result:', JSON.stringify(searchResult, null, 2));
+console.log('[test_mcp] web_search result:', JSON.stringify(searchResult, null, 2));
 
 // Test 2: db_read
-console.log('[test] Calling db_read...');
+console.log('[test_mcp] Calling db_read...');
 const dbResult = await client.callTool({
   name: 'db_read',
   arguments: {
-    persona_id: 'd5465a85-e04b-48ab-a8ac-ba5c6904ca2e',
-    table: 'personas',
-    limit: 3,
+    persona_id: PERSONA_ID,
+    table:      'personas',
+    limit:      3,
   },
 });
-console.log('[test] db_read result:', JSON.stringify(dbResult, null, 2));
+console.log('[test_mcp] db_read result:', JSON.stringify(dbResult, null, 2));
 
 await client.close();
-console.log('[test] Done');
+console.log('[test_mcp] Done');
