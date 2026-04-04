@@ -1,7 +1,7 @@
 // src/index.ts
 // =============================================================================
 // GIF MCP server — entry point
-// HTTP/SSE transport. Listens on PORT (default 3100).
+// Streamable HTTP transport (ADR-002). Listens on PORT (default 3100).
 //
 // Enforcement engine responsibilities:
 //   1. Validate persona (existence, active status, temporal bounds)
@@ -13,6 +13,7 @@
 // The enforcement engine has no knowledge of which tools exist or what they do.
 // Tools are registered in src/tools/registry.ts (ADR-026, ADR-027).
 //
+// ADR-002: Streamable HTTP transport (replaces deprecated SSE transport)
 // ADR-008: MCP server as the AI tool interface layer
 // ADR-009: Persona-based permissions as infrastructure
 // ADR-017: Governance audit schema stubs
@@ -21,13 +22,15 @@
 // ADR-027: GIF packaging model and extraction progression
 // =============================================================================
 
+import { randomUUID } from 'node:crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
   ErrorCode,
   McpError,
+  isInitializeRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import http from 'http';
 import { validatePersona } from './persona.js';
@@ -37,112 +40,137 @@ import { TOOL_REGISTRY } from './tools/registry.js';
 const PORT = parseInt(process.env.PORT || '3100');
 
 // ----------------------------------------------------------------------------
-// MCP server instance
+// MCP server factory — one Server instance per session
+// (Server is the low-level API required for registry-driven dispatch — gif's
+// enforcement engine needs full control over request handling, which the
+// high-level McpServer abstraction does not expose.)
 // ----------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
-const server = new Server(
-  { name: 'gif-mcp-server', version: '0.1.0' },
-  { capabilities: { tools: {} } }
-);
+function createServer() {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- low-level API required for registry-driven dispatch
+  const server = new Server(
+    { name: 'gif-mcp-server', version: '0.1.0' },
+    { capabilities: { tools: {} } }
+  );
 
-// ----------------------------------------------------------------------------
-// Active SSE transports — keyed by sessionId
-// ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // ListTools — derived from registry, no hardcoded definitions
+  // --------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
-const transports = new Map<string, SSEServerTransport>();
+  server.setRequestHandler(ListToolsRequestSchema, () => ({
+    tools: Array.from(TOOL_REGISTRY.values()).map(h => h.definition),
+  }));
 
-// ----------------------------------------------------------------------------
-// ListTools — derived from registry, no hardcoded definitions
-// ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // CallTool — enforcement engine + registry dispatch
+  // Session lifecycle managed here — wraps all tool executions.
+  // --------------------------------------------------------------------------
 
-server.setRequestHandler(ListToolsRequestSchema, () => ({
-  tools: Array.from(TOOL_REGISTRY.values()).map(h => h.definition),
-}));
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
 
-// ----------------------------------------------------------------------------
-// CallTool — enforcement engine + registry dispatch
-// Session lifecycle managed here — wraps all tool executions.
-// ----------------------------------------------------------------------------
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  if (!args || typeof args !== 'object') {
-    throw new McpError(ErrorCode.InvalidParams, 'Tool arguments are required');
-  }
-
-  const persona_id = args['persona_id'] as string | undefined;
-
-  if (!persona_id) {
-    throw new McpError(ErrorCode.InvalidParams, 'persona_id is required for all tool calls');
-  }
-
-  const toolHandler = TOOL_REGISTRY.get(name);
-  if (!toolHandler) {
-    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-  }
-
-  // Validate persona — always, regardless of skipSession
-  const validation = await validatePersona(persona_id);
-  if (!validation.valid) {
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ valid: false, reason: validation.reason, message: validation.message }) }],
-      isError: true,
-    };
-  }
-
-  // skipSession tools (persona_validate) — execute directly, no session or audit
-  if (toolHandler.skipSession) {
-    return toolHandler.execute(args, validation.persona, '');
-  }
-
-  // All other tools — create session, execute, audit, close session
-  const sessionId = await createSession({
-    personaId:         persona_id,
-    invocationContext: {
-      tool:                name,
-      arguments:           args,
-      persona_purpose:     validation.persona.purpose,
-      persona_valid_until: validation.persona.valid_until,
-    },
-  });
-
-  let result: Awaited<ReturnType<typeof toolHandler.execute>> | undefined;
-
-  try {
-    result = await toolHandler.execute(args, validation.persona, sessionId);
-  } finally {
-    // Resolve audit event type and source_ref.
-    // Tools with auditMetadata control their own event classification.
-    // All others emit a generic tool_call event.
-    let eventType:    string           = 'tool_call';
-    let sourceRef:    string | undefined;
-    let humanActorId: string | undefined;
-
-    if (toolHandler.auditMetadata && result !== undefined) {
-      const meta = toolHandler.auditMetadata(args, result);
-      eventType    = meta.eventType;
-      sourceRef    = meta.sourceRef;
-      humanActorId = meta.humanActorId;
+    if (!args || typeof args !== 'object') {
+      throw new McpError(ErrorCode.InvalidParams, 'Tool arguments are required');
     }
 
-    await logAuditEvent({
-      personaId:       persona_id,
-      sessionId,
-      eventType,
-      toolName:        name,
-      outcome:         result === undefined || result.isError ? 'error' : 'success',
-      sourceRef,
-      humanActorId,
-      purposeDeclared: validation.persona.purpose,
-    });
-    await closeSession(sessionId);
-  }
+    const persona_id = args['persona_id'] as string | undefined;
 
-  return result;
-});
+    if (!persona_id) {
+      throw new McpError(ErrorCode.InvalidParams, 'persona_id is required for all tool calls');
+    }
+
+    const toolHandler = TOOL_REGISTRY.get(name);
+    if (!toolHandler) {
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+
+    // Validate persona — always, regardless of skipSession
+    const validation = await validatePersona(persona_id);
+    if (!validation.valid) {
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ valid: false, reason: validation.reason, message: validation.message }) }],
+        isError: true,
+      };
+    }
+
+    // skipSession tools (persona_validate) — execute directly, no session or audit
+    if (toolHandler.skipSession) {
+      return toolHandler.execute(args, validation.persona, '');
+    }
+
+    // All other tools — create session, execute, audit, close session
+    const sessionId = await createSession({
+      personaId:         persona_id,
+      invocationContext: {
+        tool:                name,
+        arguments:           args,
+        persona_purpose:     validation.persona.purpose,
+        persona_valid_until: validation.persona.valid_until,
+      },
+    });
+
+    let result: Awaited<ReturnType<typeof toolHandler.execute>> | undefined;
+
+    try {
+      result = await toolHandler.execute(args, validation.persona, sessionId);
+    } finally {
+      // Resolve audit event type and source_ref.
+      // Tools with auditMetadata control their own event classification.
+      // All others emit a generic tool_call event.
+      let eventType:    string           = 'tool_call';
+      let sourceRef:    string | undefined;
+      let humanActorId: string | undefined;
+
+      if (toolHandler.auditMetadata && result !== undefined) {
+        const meta = toolHandler.auditMetadata(args, result);
+        eventType    = meta.eventType;
+        sourceRef    = meta.sourceRef;
+        humanActorId = meta.humanActorId;
+      }
+
+      await logAuditEvent({
+        personaId:       persona_id,
+        sessionId,
+        eventType,
+        toolName:        name,
+        outcome:         result === undefined || result.isError ? 'error' : 'success',
+        sourceRef,
+        humanActorId,
+        purposeDeclared: validation.persona.purpose,
+      });
+      await closeSession(sessionId);
+    }
+
+    return result;
+  });
+
+  return server;
+}
+
+// ----------------------------------------------------------------------------
+// Active Streamable HTTP transports — keyed by MCP session ID
+// ----------------------------------------------------------------------------
+
+const transports = new Map<string, StreamableHTTPServerTransport>();
+
+// ----------------------------------------------------------------------------
+// Body parsing — required for raw Node.js HTTP (no framework body parser)
+// ----------------------------------------------------------------------------
+
+function readBody(req: http.IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        resolve(data ? JSON.parse(data) : undefined);
+      } catch {
+        reject(new Error('Invalid JSON in request body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
 
 // ----------------------------------------------------------------------------
 // HTTP request handler (async) — extracted so the createServer callback
@@ -159,42 +187,76 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (req.method === 'GET' && req.url === '/sse') {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- see import comment above
-    const transport = new SSEServerTransport('/message', res);
+  if (req.url === '/mcp') {
 
-    transports.set(transport.sessionId, transport);
+    if (req.method === 'POST') {
+      let body: unknown;
+      try {
+        body = await readBody(req);
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid request body' }));
+        return;
+      }
 
-    transport.onclose = () => {
-      transports.delete(transport.sessionId);
-      console.log(`[server] Session closed: ${transport.sessionId}`);
-    };
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    await server.connect(transport);
-    console.log(`[server] Session opened: ${transport.sessionId}`);
-    return;
-  }
+      if (sessionId && transports.has(sessionId)) {
+        // Existing session — route to the established transport
+        const transport = transports.get(sessionId);
+        if (!transport) return; // unreachable: has() confirmed existence
+        await transport.handleRequest(req, res, body);
+        return;
+      }
 
-  if (req.method === 'POST' && req.url?.startsWith('/message')) {
-    const url = new URL(req.url, `http://localhost:${String(PORT)}`);
-    const sessionId = url.searchParams.get('sessionId');
+      if (!sessionId && isInitializeRequest(body)) {
+        // New session initialization
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            transports.set(sid, transport);
+            console.log(`[server] Session opened: ${sid}`);
+          },
+        });
 
-    if (!sessionId) {
-      res.writeHead(400);
-      res.end(JSON.stringify({ error: 'sessionId query parameter is required' }));
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid) {
+            transports.delete(sid);
+            console.log(`[server] Session closed: ${sid}`);
+          }
+        };
+
+        const server = createServer();
+        await server.connect(transport);
+        await transport.handleRequest(req, res, body);
+        return;
+      }
+
+      // No valid session ID and not an initialize request
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Bad Request: missing or invalid session' },
+        id: null,
+      }));
       return;
     }
 
-    const transport = transports.get(sessionId);
+    if (req.method === 'GET' || req.method === 'DELETE') {
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    if (!transport) {
-      res.writeHead(404);
-      res.end(JSON.stringify({ error: `Session ${sessionId} not found` }));
+      if (!sessionId || !transports.has(sessionId)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid or missing session ID' }));
+        return;
+      }
+
+      const transport = transports.get(sessionId);
+      if (!transport) return; // unreachable: has() confirmed existence
+      await transport.handleRequest(req, res);
       return;
     }
-
-    await transport.handlePostMessage(req, res);
-    return;
   }
 
   res.writeHead(404);
@@ -202,7 +264,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // ----------------------------------------------------------------------------
-// HTTP server and SSE transport
+// HTTP server
 // ----------------------------------------------------------------------------
 
 const httpServer = http.createServer((req, res) => {
@@ -218,12 +280,18 @@ const httpServer = http.createServer((req, res) => {
 httpServer.listen(PORT, () => {
   console.log(`[server] GIF MCP server running on port ${String(PORT)}`);
   console.log(`[server] Health: http://localhost:${String(PORT)}/health`);
-  console.log(`[server] SSE:    http://localhost:${String(PORT)}/sse`);
+  console.log(`[server] MCP:    http://localhost:${String(PORT)}/mcp`);
   console.log(`[server] Tools registered: ${Array.from(TOOL_REGISTRY.keys()).join(', ')}`);
 });
 
 process.on('SIGTERM', () => {
   console.log('[server] SIGTERM received — shutting down');
+  for (const [sid, transport] of transports) {
+    transport.close().catch((err: unknown) => {
+      console.error(`[server] Error closing transport for session ${sid}:`, err);
+    });
+  }
+  transports.clear();
   httpServer.close(() => {
     console.log('[server] HTTP server closed');
     process.exit(0);

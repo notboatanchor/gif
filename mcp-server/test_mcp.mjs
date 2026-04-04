@@ -1,6 +1,6 @@
 // test_mcp.mjs
 // =============================================================================
-// MCP server end-to-end test — connects via SSE, exercises web_search and db_read.
+// MCP server end-to-end test — connects via Streamable HTTP, exercises web_search and db_read.
 //
 // Discovers the test persona dynamically (same pattern as test_sprint4.mjs).
 // Requires: MCP server running on port 3100, test_setup.mjs run first.
@@ -8,7 +8,7 @@
 
 import pg from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const { Pool } = pg;
 
@@ -38,7 +38,7 @@ if (row.rows.length === 0) {
 const PERSONA_ID = row.rows[0].persona_id;
 console.log(`[test_mcp] Using persona: ${PERSONA_ID}`);
 
-const transport = new SSEClientTransport(new URL('http://localhost:3100/sse'));
+const transport = new StreamableHTTPClientTransport(new URL('http://localhost:3100/mcp'));
 const client = new Client({ name: 'test-client', version: '0.1.0' }, { capabilities: {} });
 
 await client.connect(transport);
