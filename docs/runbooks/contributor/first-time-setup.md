@@ -115,7 +115,7 @@ IDENTITY_HMAC_SECRET=$IDENTITY_HMAC_SECRET \
 npm test
 ```
 
-`npm test` runs all test files in sequence: `test_setup`, `test_mcp`, `test_sprint3`, `test_sprint4`, and the five Sprint 5 suites.
+`npm test` runs all test files in sequence: `test_setup`, `test_mcp`, `test_audit_trail`, `test_delegation`, `test_hash_chain`, `test_identity_binding`, `test_read_log`, and `test_retention`.
 
 ---
 
