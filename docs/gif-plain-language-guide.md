@@ -6,11 +6,17 @@
 
 ## What Problem It Solves
 
-When an AI takes action — reading a file, querying a database, calling an API — there is typically no reliable record of *why* that action was authorized, *who* authorized it, or *whether it stayed within the intended boundaries*. If something goes wrong, you cannot reconstruct what happened. If an auditor asks, you have nothing to show them.
+Here is the scenario that GIF exists to prevent.
 
-Most existing tools solve this problem for humans: when a person logs in and does something, that gets recorded. But AI agents don't behave like people. They make autonomous decisions, call tools in non-obvious sequences, and their "identity" isn't tied to a username and password.
+A human provisions an AI with an API token — access credentials scoped to a permission set. The AI runs. At some point during execution, it infers something from its instructions, conflates two directives, or acts on context that wasn't fully anticipated when the token was issued. It does something it shouldn't have. Not because the human intended it. Not because the AI was malicious. Because AI systems make autonomous decisions, call tools in non-obvious sequences, and the gap between "what we meant" and "what it did" can be significant.
 
-GIF was built to solve this specifically for AI. The question it answers: **when your AI system does something, can you prove — to a regulator, an auditor, or yourself — exactly what it did, why it was allowed to do it, and what it was blocked from doing?**
+Nobody finds out for a week. Maybe two. By the time the outcome surfaces — a record in a wrong state, data accessed that shouldn't have been, an action taken that can't be undone — the trail is cold. You know *that* something happened. You don't know *what* the AI thought it was doing, *when* it happened, *which* specific action caused it, or *what* it touched along the way. You're doing forensics on an event that may have had downstream consequences you can no longer fully reconstruct.
+
+This is the real problem. Not an abstract governance gap — a concrete operational reality that becomes a crisis when it intersects with regulated data, a customer record, a financial transaction, or a security boundary.
+
+Existing tools don't solve this because they were built for humans. When a person logs in and does something, that gets recorded — because the person authenticated, navigated a defined interface, and their identity was tied to the session. AI agents don't work that way. They act under provisioned access, make decisions autonomously, and leave no contemporaneous record of what they did or why they were authorized to do it.
+
+GIF was built to solve this specifically for AI. The question it answers: **when your AI system does something, can you prove — to a regulator, an auditor, or yourself — exactly what it did, why it was authorized to do it, and what it was blocked from doing — and can you answer that question a week later, not just in real time?**
 
 ---
 
