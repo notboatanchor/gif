@@ -28,15 +28,11 @@ const persona_js_1 = require("../persona.js");
 // Core governance tables are explicitly excluded — they are written to
 // only by the MCP server internals, never via the db_write tool.
 // ----------------------------------------------------------------------------
+// GIF schema tables writable via db_write. Adopters: add domain-specific table names here.
+// Core governance tables (personas, audit_events, scope_violations, etc.) are
+// intentionally excluded — they are managed by the enforcement engine, never via tool calls.
 const ALLOWED_WRITE_TABLES = new Set([
-    'entities',
-    'relationships',
-    'research_runs',
-    'research_configurations',
-    'search_results',
-    'source_registry',
-    'gap_analysis',
-    'synthesis_outputs',
+    'user_persona_assignments',
 ]);
 // ----------------------------------------------------------------------------
 // Scope validation

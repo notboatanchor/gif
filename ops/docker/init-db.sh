@@ -10,7 +10,7 @@
 # Steps:
 #   1. Bootstrap  — create gif_admin, gif_app roles and gif schema (superuser)
 #   2. Passwords  — set role passwords from environment variables (superuser)
-#   3. Migrations — run 001–010 as gif_admin
+#   3. Migrations — run 001–011 as gif_admin
 #
 # To reset and re-run: docker compose down -v && docker compose up -d
 # =============================================================================
@@ -62,7 +62,8 @@ for migration in \
     007_identity_binding.sql \
     008_audit_read_log.sql \
     009_retention_lifecycle.sql \
-    010_combination_policies.sql
+    010_combination_policies.sql \
+    011_remove_research_pipeline_tables.sql
 do
     echo "       → $migration"
     psql -v ON_ERROR_STOP=1 -U gif_admin -d "$DB" \

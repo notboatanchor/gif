@@ -29,6 +29,7 @@ const persona_js_1 = require("../persona.js");
 // considered in the permission model.
 // Add tables here as new schema extensions are deployed.
 // ----------------------------------------------------------------------------
+// GIF schema tables. Adopters: add domain-specific table names here.
 const ALLOWED_READ_TABLES = new Set([
     'personas',
     'audit_events',
@@ -36,14 +37,6 @@ const ALLOWED_READ_TABLES = new Set([
     'delegation_chain',
     'revocation_log',
     'sessions',
-    'entities',
-    'relationships',
-    'research_runs',
-    'research_configurations',
-    'search_results',
-    'source_registry',
-    'gap_analysis',
-    'synthesis_outputs',
     'tool_registry',
     'user_persona_assignments',
     'erasure_log',
