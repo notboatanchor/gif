@@ -1,7 +1,7 @@
 -- =============================================================================
 -- GIF Core Schema — Migration 001
--- Applies to: gif_research database
--- Run as: psql -U postgres -d gif_research -f gif/schema/001_gif_core.sql
+-- Applies to: gif database
+-- Run as: psql -U gif_admin -d gif -f gif/schema/001_gif_core.sql
 --
 -- Covers:
 --   personas            Persona registry and scope definitions

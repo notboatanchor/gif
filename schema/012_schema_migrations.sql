@@ -3,6 +3,8 @@
 -- After this migration, init-db.sh applies each migration exactly once,
 -- recording it here on success.
 
+BEGIN;
+
 CREATE TABLE IF NOT EXISTS gif.schema_migrations (
     migration_name TEXT        NOT NULL,
     applied_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -14,3 +16,5 @@ COMMENT ON TABLE gif.schema_migrations IS
     'Managed by init-db.sh — do not modify manually.';
 
 GRANT SELECT, INSERT ON gif.schema_migrations TO gif_app;
+
+COMMIT;

@@ -82,26 +82,15 @@ Rules:
 
 ## 4. Registering the migration
 
-`init-db.sh` maintains an explicit ordered call list. After writing your file, add it in two places:
-
-**a. The bootstrap detection seed block** (handles existing installs upgrading to migration tracking — lines ~91–108). Add your migration name to the `for name in \` list:
-
-```bash
-for name in \
-    001_gif_core.sql \
-    ...
-    011_remove_research_pipeline_tables.sql \
-    013_your_migration.sql   # add here
-do
-```
-
-**b. The `apply_migration` call list** (lines ~112–124). Append after the last entry:
+`init-db.sh` maintains an explicit ordered call list. After writing your file, add it to the `apply_migration` call list (at the bottom of the migrations block). Append after the last entry:
 
 ```bash
 apply_migration "013_your_migration.sql" /schema/013_your_migration.sql
 ```
 
 The order in the call list is the apply order. It must match the numeric sequence.
+
+**Do not add new migrations to the bootstrap detection seed block.** That block (the `for name in \` loop near the top of step 3) exists for one purpose only: seeding migrations 001–012 as already-applied on installs that predate migration tracking. It is a historical transition artifact, not a registration list. Adding a new migration there would mark it as already applied on the exact upgrade path it needs to run on.
 
 ---
 

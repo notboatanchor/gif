@@ -99,13 +99,21 @@ if [ "$PERSONAS_EXISTS" = "t" ] && [ "$MIGRATIONS_TRACKED" = "f" ]; then
         008_audit_read_log.sql \
         009_retention_lifecycle.sql \
         010_combination_policies.sql \
-        011_remove_research_pipeline_tables.sql
+        011_remove_research_pipeline_tables.sql \
+        012_schema_migrations.sql
     do
         psql -v ON_ERROR_STOP=1 -U gif_admin -d "$DB" -c \
           "INSERT INTO gif.schema_migrations(migration_name) VALUES ('$name') ON CONFLICT DO NOTHING;"
         echo "         seeded: $name"
     done
     echo "       Seed complete."
+else
+    # Fresh install or already-tracked install.
+    # apply_migration queries gif.schema_migrations, so the table must exist before
+    # any apply_migration calls. Run 012 now — CREATE TABLE IF NOT EXISTS is idempotent.
+    psql -v ON_ERROR_STOP=1 -U gif_admin -d "$DB" -f /schema/012_schema_migrations.sql
+    psql -v ON_ERROR_STOP=1 -U gif_admin -d "$DB" -c \
+      "INSERT INTO gif.schema_migrations(migration_name) VALUES ('012_schema_migrations.sql') ON CONFLICT DO NOTHING;"
 fi
 
 # Apply all migrations in order, skipping any already recorded.

@@ -38,7 +38,7 @@ GIF was designed to make these questions answerable.
 
 ---
 
-## What GIF Is
+## Governance Primitives
 
 GIF is **AI governance and structural explainability infrastructure**. It enforces authorization before execution and records every action in an append-only audit trail that is immutable at the persistence layer. Three primitives form the foundation.
 
