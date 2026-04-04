@@ -1,11 +1,11 @@
 # Governed Intelligence Framework (GIF)
-## Product Overview — Investor Document
+## Product Overview
 
 ---
 
-## Executive Summary
+## What GIF Is
 
-The Governed Intelligence Framework (GIF) is one of the few infrastructure products that treats AI agents as first-class principals — not service accounts with prompts attached, but governance identities with declared purpose, explicitly bounded scope, temporal validity, and auditable delegation chains.
+The Governed Intelligence Framework (GIF) is **AI governance and structural explainability infrastructure**. It enforces authorization before AI tool execution and records every action in an append-only audit trail that is immutable at the persistence layer.
 
 GIF sits between an AI model and the tools it can invoke. It enforces permission boundaries before execution, logs every action in a structurally immutable audit trail, and produces what can accurately be called **structural explainability infrastructure**: when a regulator asks why your AI system accessed a patient record, a financial transaction, or a sensitive document, the answer is not "the model thought it was relevant." The answer is: persona X, created by administrator Y, under delegation chain Z, invoked tool A with parameters B at timestamp C.
 
@@ -81,7 +81,7 @@ Every audit record captures:
 
 The audit tables are INSERT-only at the database permission level. No application credential — including the enforcement layer itself — can UPDATE or DELETE an audit record. This is not a policy. It is a structural constraint enforced at the persistence layer. The trail cannot be altered after the fact by any means available to an application.
 
-This is a stronger guarantee than policy-based immutability ("we promise not to change the logs") but it is honest about its scope: INSERT-only database permissions stop application-level tampering. They do not stop a database administrator with direct infrastructure access, a backup-restore cycle that rewinds time, or a compromised superuser credential. These are real attack surfaces. The near-term roadmap addresses them through **cryptographic log signing** — hash chains linking audit records, with periodic external timestamping, such that any gap, reordering, or modification in the audit sequence is detectable by any party holding the verification key. Until that is implemented, GIF's audit trail should be described accurately as structurally protected at the application layer, with infrastructure-level tamper evidence on the roadmap. See the Compliance Hardening Roadmap section for implementation timeline.
+This is a stronger guarantee than policy-based immutability ("we promise not to change the logs") but it is honest about its scope: INSERT-only database permissions stop application-level tampering. They do not stop a database administrator with direct infrastructure access, a backup-restore cycle that rewinds time, or a compromised superuser credential. These are real attack surfaces. The roadmap addresses them through **cryptographic log signing** — hash chains linking audit records, with periodic external timestamping, such that any gap, reordering, or modification in the audit sequence is detectable by any party holding the verification key. Until that is implemented, GIF's audit trail should be described accurately as structurally protected at the application layer, with infrastructure-level tamper evidence on the roadmap.
 
 A complete reconstruction of any AI session's actions — every tool call, every rejection, every scope violation — is possible from the audit log alone.
 
@@ -172,9 +172,9 @@ The positioning is precise: GIF provides the authorization substrate and the str
 
 ---
 
-## What an Implementation Is Responsible For
+## Adopter Responsibilities
 
-**Tool definition.** Adopters build and register the domain tools — database reads, web searches, API calls, write operations. GIF provides the enforcement wrapper and the registry; the tools are adopter domain logic.
+**Tool definition.** Adopters build and register the domain tools — database reads, API calls, write operations. GIF provides the enforcement wrapper and the registry; the tools are adopter domain logic.
 
 **Persona design.** Adopters define what personas exist, what their declared purposes are, and what scope each is granted. GIF enforces the structure; adopters design it for their governance requirements.
 
@@ -188,7 +188,7 @@ The positioning is precise: GIF provides the authorization substrate and the str
 
 ---
 
-## What GIF Explicitly Does Not Do
+## What GIF Does Not Do
 
 - **GIF is not an AI model.** It does not generate, synthesize, or reason. It governs.
 - **GIF is not an application framework.** It does not provide UI, workflow orchestration, or end-user product surface.
@@ -202,15 +202,13 @@ The positioning is precise: GIF provides the authorization substrate and the str
 
 ## Architecture
 
-GIF deploys as a containerized MCP server. The enforcement engine is published as an importable package that adopter tool servers take as a dependency:
+GIF deploys as a containerized MCP server. The enforcement engine is published as an importable package that adopter tool servers take as a versioned git dependency:
 
-- The GIF enforcement surface is a versioned module — adopters update GIF by updating a package dependency
+- The GIF enforcement surface is a versioned module — adopters update GIF by updating a package dependency, pinned to a tag via SSH reference
 - Adopters register domain tools against the enforcement layer without modifying GIF source
 - Multiple adopter tool servers can each carry their own GIF enforcement import, enabling independent deployment and versioning per domain
 
 The persistence layer is PostgreSQL. Schema isolation is enforced at the database level — GIF and adopter schemas are separated, with per-adopter application credentials carrying only required grants. No adopter credential can touch another adopter's schema.
-
-The entity model is graph-ready by design: stable UUIDs, relationships as explicit table records with type, confidence score, and source attribution. Graph query capabilities load directly from PostgreSQL with no transformation required.
 
 ---
 
@@ -220,59 +218,11 @@ GIF runs inside the adopter's infrastructure. It is not a SaaS product and requi
 
 This deployment model matters for regulated industries — healthcare, finance, defense, legal — where data residency requirements and audit chain integrity preclude third-party SaaS governance tooling. The full stack is reproducible from the repository and environment configuration. There is no vendor lock-in at the infrastructure layer.
 
----
-
-## Target Buyer Profile
-
-GIF is not a fit for every enterprise AI deployment. Identifying the right buyer — and the wrong one — is as important as the product description.
-
-**The right buyer today** is an organization that is already running AI in production, in a regulated context, and has begun to feel the governance gap. The specific profiles:
-
-**Healthcare organizations running AI clinical assistants.** Nuance DAX, Abridge, and similar products are now processing real patient encounters in production. When OCR asks "how do you know your AI accessed only the records necessary for patient care?" — HIPAA minimum necessary, applied to an autonomous agent — there is currently no good answer. The CISO at a health system deploying AI in 2025 needs an audit trail that survives regulatory scrutiny, not a SIEM entry that says "API called."
-
-**Financial services firms with AI in advisory or operations workflows.** Bloomberg GPT integrations, AI-assisted trade desk tools, and underwriting automation are in production at major institutions. SEC recordkeeping rules and FINRA obligations require demonstrable records of what AI systems did on behalf of clients. The GRC lead at a mid-market financial firm deploying AI copilots is the budget owner — not IT, not the AI team.
-
-**Defense contractors and federal AI vendors subject to DoD AI requirements.** DoD's AI Bill of Materials requirements and NIST AI RMF adoption as a procurement condition are creating a forcing function. A defense contractor deploying AI on programs-of-record needs governance infrastructure that maps to NIST AI RMF. The program security officer, not the engineering lead, owns this decision.
-
-**AI-native companies embedding governance to de-risk enterprise sales.** Harvey, Glean, Hebbia, and companies building AI products for enterprise customers face a consistent procurement blocker: "How do we know your AI only accesses what it's supposed to?" A GIF integration is a sales accelerant — it turns a vague governance claim into a demonstrable audit architecture. The CTO of an AI-native company that is losing enterprise deals to governance objections is the most motivated buyer in the market.
-
-**The wrong buyer today** is a large enterprise IT organization with dozens of internal AI projects, an existing Okta/CyberArk/SailPoint stack, a six-month procurement process, and no single budget owner for "AI governance." That organization's objections — MCP rearchitecture lift, SOC 2 requirement, multi-tenant operational model — are legitimate, and GIF is not ready to address all of them without reference customers, certifications, and integration work that doesn't yet exist. That buyer will be a fit in 18-24 months, not today.
-
-The compliance wedge is narrow and that is a feature, not a bug. Landing 5-10 referenceable customers in healthcare, financial services, and defense creates the case studies and audit evidence that turns the wrong-buyer-today into the right-buyer in the next cycle.
-
----
-
-## Competitive Moat
-
-### The Incumbent Landscape
-
-Okta launched Okta AI Governance (preview, Q4 2024). CyberArk shipped Secure AI Access. Saviynt and SailPoint have AI governance items on their roadmaps. These are real products from well-capitalized companies with large existing customer bases, and they need to be addressed directly rather than ignored.
-
-**What the incumbents are doing:** Okta's approach wraps governance controls around LLM API calls at the application or API gateway layer. It provides access reviews, audit logs, and compliance reporting for AI-related access events. CyberArk's approach extends its privileged access management model to AI service accounts. Both products have the advantage of existing SSO integrations, FedRAMP certifications, and established procurement relationships.
-
-**What the incumbents cannot do:** API-gateway or application-layer enforcement is a fundamentally different — and inferior — enforcement topology for AI governance. When Okta intercepts at the API gateway, it sees that an AI made a call to an endpoint. It does not see the tool name, the specific parameters, or the invocation context — because that information lives inside the MCP envelope, below the API layer. By the time enforcement happens at the gateway, the AI's intent is already opaque. You can log that a call was made; you cannot record what the AI was actually trying to do.
-
-GIF enforces at the MCP layer — inside the tool invocation, before dispatch, where the tool name, parameters, and full invocation context are fully legible. The difference is not a feature comparison. It is a different enforcement topology. Okta cannot achieve MCP-layer fidelity by adding features to an API-gateway product. It would require rebuilding the enforcement stack from scratch at a different architectural layer.
-
-This matters practically in two scenarios. First, in a liability investigation: the GIF audit trail says "persona X invoked `read_patient_record` with `patient_id=12345` at 14:23:07, authorized by delegation chain Y." The Okta audit log says "AI made API call to healthcare service at 14:23:07." One of these answers the regulatory question. The other does not. Second, in scope violation detection: GIF rejects and records a call that exceeds persona scope before execution. An API-gateway product cannot reject a call based on tool parameters it never saw.
-
-**The 18-24 month window:** Okta can rebuild toward MCP-layer enforcement if they prioritize it. The timeline is 18-24 months of engineering effort — and that assumes they correctly identify MCP as the enforcement point, which their current product approach suggests they have not. The window is real and it is time-bounded. The strategy response is to land reference customers in regulated industries and accumulate the audit history switching cost before that window closes.
-
-### Structural Moats
-
-**Purpose-built for AI principals, not adapted from human IAM.** Every authorization primitive in GIF — personas, delegation chains, session handling, scope violation detection — was designed for how AI agents actually behave. The alternatives are service accounts with scopes bolted on, or RBAC systems adapted from human access control patterns. Neither handles non-linear autonomous decision-making. Neither produces a governance audit trail that survives regulatory scrutiny.
-
-**The enforcement point is correct.** MCP-layer enforcement is the only point where the AI's intent is fully legible and still interceptable. Application-layer checks can be routed around. Database-layer checks arrive after the fact. This is not a position achievable by retrofitting an existing product.
-
-**The audit trail is the switching cost.** An organization that deploys GIF accumulates an immutable record of every AI governance decision — tool calls, scope violations, delegation chains, session events. That record becomes compliance evidence, regulatory defense, and operational history. Migrating governance infrastructure means migrating or abandoning that history. The longer GIF runs in a deployment, the harder it is to replace.
-
-**Early position in a forming market.** NIST AI RMF was released January 2023. ISO 42001 was published December 2023. EU AI Act enforcement begins 2025-2026. DoD AI Bill of Materials requirements arrive in 2025. Every large enterprise deploying production AI is approaching a governance reckoning. The organizations that establish auditable infrastructure now will be difficult to displace when the reckoning arrives.
+GIF runs under Docker Compose and is fully reproducible from the repository and an environment file.
 
 ---
 
 ## Current State
-
-GIF is fully implemented and running in a production configuration.
 
 | Component | Status |
 |---|---|
@@ -286,33 +236,13 @@ GIF is fully implemented and running in a production configuration.
 | Enforcement packaging (importable module) | Complete |
 | Schema isolation and per-adopter credentials | Complete |
 
-Validated end-to-end: persona creation through tool execution through audit record through scope violation detection. Runs on self-hosted infrastructure under Docker Compose and is fully reproducible from the repository and an environment file.
-
----
-
-## What Is Not Yet Built
-
-**Cryptographic log signing.** INSERT-only database permissions stop application-level audit tampering. They do not stop a database administrator with direct infrastructure access. Hash chains linking audit records with periodic external timestamping — such that any gap or modification in the sequence is cryptographically detectable — are the near-term roadmap item that closes this gap and makes the audit trail defensible against the DBA/superuser attack vector that regulated-industry auditors will raise.
-
-**User-to-persona identity binding with verification.** Personas are created by administrators. Currently, there is no GIF-enforced control preventing a shared admin account from creating a persona, or preventing one administrator's credentials from being used by another. For regulated deployments where individual human accountability must be provable through the audit chain — a SOC 2 or HIPAA requirement — the user-to-persona binding must be tightened so that every persona traces to an individually authenticated human. This is a near-term roadmap item.
-
-**Combination policy enforcement.** Currently, enforcement answers "can this persona call this tool?" The next layer answers "should this persona be permitted to correlate these three data sources in sequence?" Combination policies — rules that evaluate sequences and combinations of tool calls, not just individual calls — are defined in principle and are a planned capability. This is the primary gap between current GIF and full AI actor parity for sophisticated multi-domain deployments.
-
-**Agent-to-agent delegation within sessions.** The current model assumes human administrators create personas. In advanced multi-agent architectures, a primary agent may need to spawn limited-scope child personas within an active session, without administrator involvement. The delegation chain model is designed to support this; the session-scoped creation mechanics are not yet implemented.
-
-**Dynamic scope adjustment.** There is no mechanism for temporary privilege elevation mid-session — an AI agent encountering a task that requires elevated scope must fail the tool call and surface that failure, rather than requesting a time-bounded elevation with audit justification. This is an advanced capability that most current enterprise deployments do not yet require.
-
-**Encryption at rest.** Deferred until the first external customer deployment. The trigger condition is defined; the implementation is not yet begun.
-
-**Identity provider integration.** User-to-persona binding invariants are specified. The SSO/directory services integration surface is an adopter responsibility and has not been built into the framework.
-
-**Multi-tenant operational hardening.** The schema model supports multiple adopters. Operational tooling — credential rotation, tenant-specific audit export, tenant isolation testing — is planned but not built.
+Validated end-to-end: persona creation through tool execution through audit record through scope violation detection.
 
 ---
 
 ## Compliance Hardening Roadmap
 
-GIF's architectural bones are correct for regulated-industry deployment. The following items are the specific gap between "architecturally sound" and "auditor-ready." They are not open questions — the approach for each is defined. The question is sequencing.
+GIF's architectural foundations are correct for regulated-industry deployment. The following capabilities close the gap between "architecturally sound" and "auditor-ready." The approach for each is defined; the question is sequencing.
 
 | Item | What It Closes | Priority |
 |---|---|---|
@@ -320,56 +250,12 @@ GIF's architectural bones are correct for regulated-industry deployment. The fol
 | **User-to-persona identity binding with verification** | Individual human accountability through the delegation chain; SOC 2 CC6.2; HIPAA workforce accountability requirement | Near-term — before first regulated-industry deployment |
 | **Read-access audit logging** | Chain of custody for the audit trail itself; demonstrates that access to audit records is itself tracked | Near-term |
 | **Retention policies and automated archival** | SOX 7-year retention, HIPAA 6-year minimum; automated enforcement that audit data is not prematurely destroyed; legal hold capability | Near-term |
-| **Segregation of duties enforcement** | SOX ICFR requirement; prevents the same persona from performing incompatible duties (initiate + approve financial transactions); documented SoD policy for persona design | Medium-term |
-| **Data-level least privilege reference architecture** | HIPAA minimum necessary; provides adopters with a documented pattern for implementing parameter-level filtering in tools, with examples | Medium-term |
+| **Segregation of duties enforcement** | SOX ICFR requirement; prevents the same persona from performing incompatible duties | Medium-term |
+| **Data-level least privilege reference architecture** | HIPAA minimum necessary; provides adopters with a documented pattern for implementing parameter-level filtering in tools | Medium-term |
+| **Agent-to-agent delegation within sessions** | Primary agent spawning limited-scope child personas without administrator involvement; session-scoped creation mechanics | Medium-term |
+| **Dynamic scope adjustment** | Temporary privilege elevation mid-session with audit justification; required for advanced multi-agent deployments | Medium-term |
+| **Encryption at rest** | Required before productization in external customer deployments | Medium-term |
+| **Multi-tenant operational hardening** | Credential rotation, tenant-specific audit export, tenant isolation testing | Medium-term |
+| **Combination policy enforcement** | Evaluates sequences and combinations of tool calls, not just individual calls; closes primary gap for sophisticated multi-domain deployments | Planned |
 
-The first four items are prerequisites for a Big 4 auditor to rely on GIF's audit trail in a SOC 2 Type II engagement. The last two are prerequisites for deployment in the highest-sensitivity regulated contexts (healthcare, SOX-scoped financial workflows). None require architectural changes to GIF — they are additive controls built on the existing foundation.
-
----
-
-## Investment Thesis
-
-Every organization that has deployed AI with tool-use capabilities will eventually face a governance moment. A regulator will ask why the AI accessed a specific record. An auditor will ask for a complete history of what the AI did during an engagement. A customer will ask how the organization can demonstrate that its AI system operated within sanctioned bounds. An incident will require reconstruction of an AI session's actions after the fact.
-
-When that moment arrives, there are two positions an organization can be in: one where the governance infrastructure was built before the question was asked, or one where it wasn't. The second position is not recoverable without rebuilding the system.
-
-GIF is the governance infrastructure that makes the first position possible. The enforcement architecture is correct, the audit trail is structurally immutable at the application layer with cryptographic signing on the near-term roadmap, and the authorization primitives were built from scratch for AI agents rather than adapted from human IAM. It maps to NIST AI RMF and ISO 42001 without being explicitly structured around either — because it was built to solve the same problems from first principles.
-
-### The Acquisition Path
-
-The most likely outcome for GIF is a strategic acquisition in the $200-400M range, in the 3-4 year timeframe, by a security platform or identity platform vendor that needs an AI governance layer and is behind on building it internally. The base case is not an IPO. It is being the product that CrowdStrike, Palo Alto Networks, or Wiz acquires to complete their AI security story before a competitor does.
-
-The logic for each acquirer:
-
-**CrowdStrike** has built its identity security business (Falcon Identity) but lacks AI governance primitives. GIF slots into "AI workload security" and gives them a differentiated story against Palo Alto and Microsoft. CrowdStrike has paid $300-400M for security infrastructure companies at similar traction levels.
-
-**Palo Alto Networks** needs an AI governance layer for Prisma Cloud. "AI workload governance" fits their platform extension thesis. They paid $195M for Cider Security (software supply chain) — GIF as "AI supply chain security for tool invocations" fits that acquisition pattern.
-
-**Wiz** is building toward a complete cloud security platform and AI governance is a current gap. Acquiring GIF gives them immediate differentiation against CrowdStrike and Palo Alto in a category none of them owns yet.
-
-**Okta** is the ironic scenario: they acquire GIF to accelerate their AI governance roadmap rather than build MCP-layer enforcement from scratch. This happens if GIF has 20-30 enterprise customers before Okta ships competitive features.
-
-What needs to be true for a $300M+ outcome: 20-30 enterprise customers, 2-3 reference customers in regulated industries with public case studies, demonstrated use of the audit trail in a regulatory defense or compliance audit, and evidence that the MCP enforcement architecture is not easily replicated by incumbents.
-
-### The 18-24 Month Window
-
-Okta, CyberArk, and others are 18-24 months away from shipping credible MCP-layer enforcement — assuming they correctly identify it as the enforcement point, which their current products suggest they have not. The strategy is to use that window to land 20+ enterprise customers and accumulate the audit history switching cost before incumbents catch up.
-
-The tailwinds accelerating the window:
-
-- HIPAA enforcement against AI clinical tools — the first enforcement action accelerates the healthcare buying motion by years
-- DoD AI BOM requirements arriving in 2025 — creates a federal contractor forcing function
-- EU AI Act high-risk system enforcement beginning 2025-2026 — European regulated deployments need this now
-- Multi-agent architectures moving from frontier labs to enterprise in 2025-2026 — the point at which delegation chains and combination policies become mandatory, not optional
-
-### Value Inflection Milestones
-
-1. **Compliance hardening complete** (cryptographic log signing, user-to-persona binding, retention policies) — the audit trail claim becomes fully defensible; regulated-industry procurement blockers are removed
-2. **First 5 referenceable regulated-industry customers** — validates the compliance wedge and produces case study material; moves the VC verdict from TRACK to INVEST
-3. **GIF repository separation** — physical extraction into an independently distributable package; multi-customer licensing conversations become possible
-4. **Combination policy enforcement** — closes the primary AI actor parity gap; expands the defensible governance claim from tool-level to behavioral authorization
-5. **First acquisition conversation with a named security platform vendor** — the logical conclusion of owning the AI governance infrastructure narrative before the window closes
-
----
-
-*This document is confidential. Distribution requires executed NDA. Not for public disclosure.*
+The first four items are prerequisites for a Big 4 auditor to rely on GIF's audit trail in a SOC 2 Type II engagement. The next two are prerequisites for deployment in the highest-sensitivity regulated contexts. None require architectural changes to GIF — they are additive controls built on the existing foundation.

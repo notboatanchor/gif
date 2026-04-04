@@ -1,6 +1,6 @@
 # GIF — What It Actually Does
 
-*A plain-language guide for understanding the framework, its setup, and how it fits into the broader stack.*
+*A plain-language guide for technical decision-makers: what the framework is, how it works, and why it's built the way it is.*
 
 ---
 
@@ -111,6 +111,8 @@ A bounded governance event. When an AI agent starts a task, a session opens. Whe
 **Audit Trail**
 The permanent record of every action taken in the system — every tool call (permitted or blocked), every session, every Persona state change. Stored in PostgreSQL with INSERT-only permissions, meaning nothing in the application layer can modify or delete a record after it's written. The trail is queryable and can reconstruct a complete picture of any session.
 
+**Why INSERT-only matters:** The append-only constraint is enforced at the database permission level — it is not a policy or a configuration flag. The application account (`gif_app`) has no UPDATE or DELETE permission on audit tables. This means the immutability of the audit trail is a structural guarantee, not something that can be accidentally or intentionally bypassed by application code. For compliance purposes, this is a meaningful distinction: you can demonstrate that the record could not have been altered, not merely that it wasn't.
+
 **MCP (Model Context Protocol)**
 The protocol that AI models use to invoke external tools. GIF enforces at this layer — it intercepts every tool call request before it executes, checks it against the Persona's scope, and then either permits or blocks it. This is the correct enforcement point: the AI's intent is fully visible here, and it's not too late to stop something.
 
@@ -121,10 +123,10 @@ The traceable record of how a Persona was created. If an administrator creates a
 The database table that records every tool the system knows about — its name, which layer it belongs to, and whether it's currently active. Tool dispatch is driven by this registry. If a tool isn't registered and active, it cannot be called, regardless of what the AI requests.
 
 **Enforcement Engine (gif-enforcement)**
-The core GIF logic, packaged as an importable module. When Research Pipeline, FederalGraph, or any other product needs GIF enforcement, it imports this package rather than duplicating the enforcement code. Updates to GIF enforcement propagate to all adopters by updating the package dependency.
+The core GIF logic, packaged as an importable module. When an adopter application needs GIF enforcement, it imports this package rather than duplicating the enforcement code. The package is declared as a versioned git dependency, pinned to a specific release tag. Updates to GIF enforcement propagate to all adopters by updating the dependency version.
 
 **Adopter**
-Any product or application that builds on top of GIF. Research Pipeline is an adopter. FederalGraph is an adopter. The examples reference implementation is a demonstration adopter. Each adopter registers its own domain tools against the GIF enforcement layer, with its own Personas and scope definitions. Adopter schemas are separated from GIF's core schema at the database level.
+Any product or application that builds on top of GIF. Each adopter registers its own domain tools against the GIF enforcement layer, with its own Personas and scope definitions. Adopter schemas are separated from GIF's core schema at the database level.
 
 **Combination Policy**
 A rule that governs whether an AI should be allowed to correlate multiple data sources together. A single data source might be innocuous; two or three in combination might create a privacy risk or a liability exposure. Combination policies fire when all sources in a defined set are present in the same AI session — not just individual tool calls, but the accumulation of access across a session.
@@ -134,7 +136,3 @@ Audit records are stored in monthly database partitions. After a defined retenti
 
 **Human Actor ID**
 The identifier of the human who took an administrative action — for example, the administrator who created or revoked a Persona. Captured on audit events so that every Persona traces to a real human decision, not just an automated process.
-
----
-
-*This document is internal context — not for distribution.*

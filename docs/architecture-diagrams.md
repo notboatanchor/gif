@@ -220,7 +220,7 @@ flowchart TB
     subgraph ADOPTER["Adopter MCP Server (adopter's repo)"]
         POOL["DB Pool<br/>(adopter credentials)"]
         AREG["Tool Registry<br/>(GIF tools + domain tools)"]
-        ATOOLS["Domain Tool Handlers<br/>(e.g. research_search, federal_db_read)"]
+        ATOOLS["Domain Tool Handlers<br/>(e.g. db_read, db_write)"]
         AENV["Environment<br/>.env — DB_URL, IDENTITY_HMAC_SECRET, PORT"]
     end
 
