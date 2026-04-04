@@ -27,7 +27,7 @@ services:
       - ./ops/docker/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
       - ./schema:/schema:ro
     ports:
-      - "5432:5432"
+      - "${PGPORT_HOST:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d ${PGDATABASE:-gif}"]
       interval: 5s

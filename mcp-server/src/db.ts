@@ -11,11 +11,11 @@ import { Pool } from 'pg';
 // Single pool instance shared across the process.
 // pg manages connection lifecycle — do not create per-request pools.
 const pool = new Pool({
-  host:     process.env.POSTGRES_HOST     || 'localhost',
-  port:     parseInt(process.env.POSTGRES_PORT || '5432'),
-  user:     process.env.POSTGRES_USER     || 'gif_app',
-  password: process.env.POSTGRES_PASSWORD,
-  database: process.env.POSTGRES_DB       || 'gif',
+  host:     process.env.PGHOST     || 'localhost',
+  port:     parseInt(process.env.PGPORT || '5432'),
+  user:     process.env.PGUSER     || 'gif_app',
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE || 'gif',
 
   // Connection pool sizing.
   // Conservative defaults for current single-server deployment.
