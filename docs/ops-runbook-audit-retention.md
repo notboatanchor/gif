@@ -1,6 +1,6 @@
 # Ops Runbook — Audit Retention and Erasure
 
-**Applies to:** gif_research database, audit_events partitioned table
+**Applies to:** gif database, audit_events partitioned table
 **Run as:** postgres (superuser) unless noted
 **Related files:**
 - `gif/ops/retire_audit_partitions.sql` — retirement eligibility report and DROP template
@@ -261,8 +261,8 @@ The RLS policies are defined on the parent table (`audit_events`) and apply to
 all partitions automatically. No per-partition RLS setup is required.
 
 The REVOKE UPDATE must be applied explicitly to each new partition because
-`ALTER DEFAULT PRIVILEGES` in `000_post_schema_grants.sql` grants UPDATE to
-`gif_app` on all new tables. See ADR-025 and Migration 002 comments.
+default privileges grant UPDATE to `gif_app` on all new tables. See ADR-025
+and Migration 002 comments.
 
 **Verify after creation:**
 
