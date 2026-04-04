@@ -72,11 +72,13 @@ GIF is a foundation layer. Applications that need AI governance — research too
 An adopter integrates GIF by:
 
 1. **Importing the enforcement package** as a dependency — no modification to GIF source required
-2. **Registering domain tools** against the enforcement layer — the tools themselves are the adopter's logic; GIF wraps them with enforcement
-3. **Designing Personas** for the AI workloads that will run in their system — declaring purpose and scope for each governance identity
-4. **Connecting their administrative interface** — however the adopter manages user identities and administrative actions, Persona creation and revocation are exposed as standard operations
+2. **Building tool handlers** — one handler per discrete action the AI is allowed to take against their application. `app_search`, `app_create_entry`, `app_delete` are three handlers, not one. Granularity is what makes Persona scope meaningful: if search and delete are the same tool, you cannot scope a Persona to search-only.
+3. **Registering those handlers** against the enforcement layer — in code (`registry.ts`) and in the database (`tool_registry`). If a tool is not registered and active in both places, it does not exist from the AI's perspective.
+4. **Managing application secrets** in environment variables accessible to the MCP server process. API keys and tokens for the adopter's application live in `.env` for development, or in the adopter's secret management infrastructure for production. GIF does not store or manage application credentials — that is the adopter's operational concern.
+5. **Designing Personas** for the AI workloads that will run in their system — declaring purpose and scope for each governance identity. A general-purpose AI assistant might be scoped to read-only tools. A purpose-built automation agent running a specific workflow gets exactly the tools that workflow requires, declared explicitly.
+6. **Connecting their administrative interface** — however the adopter manages user identities and administrative actions, Persona creation and revocation are exposed as standard MCP operations.
 
-A reference implementation is included in the repository that demonstrates this pattern end-to-end: three tools, three Personas, permitted calls, scope violations, and delegation. Any new product or tool integration follows the same pattern without touching GIF's core.
+A reference implementation is included in the repository that demonstrates this pattern end-to-end: tool handlers, Personas with different scope levels, permitted calls, scope violations, and delegation. Any new product or tool integration follows the same pattern without touching GIF's core.
 
 In practice, this means: when an AI agent touches data in an adopter's system, there is a record of it. Not a debug log — a governance record. Queryable, permanent, attributable.
 
@@ -121,6 +123,8 @@ The traceable record of how a Persona was created. If an administrator creates a
 
 **Tool Registry**
 The database table that records every tool the system knows about — its name, which layer it belongs to, and whether it's currently active. Tool dispatch is driven by this registry. If a tool isn't registered and active, it cannot be called, regardless of what the AI requests.
+
+This is the adopter's primary mechanism for controlling the AI's capability surface. The adopter deliberately defines what tools exist — the AI cannot reach anything that hasn't been registered. Adding a capability requires an explicit decision: write the handler, register it, and seed the registry entry. There is no implicit or default access.
 
 **Enforcement Engine (gif-enforcement)**
 The core GIF logic, packaged as an importable module. When an adopter application needs GIF enforcement, it imports this package rather than duplicating the enforcement code. The package is declared as a versioned git dependency, pinned to a specific release tag. Updates to GIF enforcement propagate to all adopters by updating the dependency version.

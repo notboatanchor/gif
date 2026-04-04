@@ -159,6 +159,65 @@ application code.
 
 ---
 
+## 7. Build your tool handlers
+
+Each action you want to expose to the AI is a separate handler — one handler per
+discrete operation. For example: `app_search`, `app_create_entry`, `app_update_status`,
+`app_delete` are four handlers, not one handler with an `action` parameter.
+
+**Why granularity matters:** Persona scope is enforced at the tool level. If
+`app_search` and `app_delete` are the same tool, you cannot scope a Persona to
+search-only. Granular handlers are what make Persona scope constraints meaningful
+at the action level.
+
+Each handler follows the same structure:
+1. Zod-validated input schema (what parameters the AI can pass)
+2. `validatePersona` check (enforcement, runs before any application logic)
+3. Application logic (API call, database query, or any other operation)
+4. Response returned through MCP
+
+The reference implementation in `mcp-server/src/tools/` demonstrates this pattern.
+`db_read.ts` and `db_write.ts` are adopter-layer tools — read them as templates for
+building your own handlers.
+
+Register each handler in your `registry.ts` and seed a corresponding row in the
+`tool_registry` database table. If a tool is not registered and active in both
+places, it does not exist from the AI's perspective — the request will never route
+to it.
+
+---
+
+## 8. Manage application secrets
+
+Each tool handler has access to `process.env` at runtime. API keys, tokens, and
+credentials required by your application tools belong in environment variables —
+not in the GIF database, and not hardcoded in handler source.
+
+**Development:** Add your application secrets to the `.env` file alongside the GIF
+database credentials. The `.env` file is gitignored and never committed.
+
+```
+# GIF credentials (already present)
+GIF_APP_PASSWORD=...
+IDENTITY_HMAC_SECRET=...
+
+# Your application secrets
+APP_API_KEY=...
+APP_API_BASE_URL=...
+```
+
+**Production:** `.env` is a development convenience. In production environments,
+secrets should come from your infrastructure's secret management system (AWS
+Secrets Manager, HashiCorp Vault, Kubernetes Secrets, or equivalent). The
+mechanism is the adopter's responsibility — GIF does not manage application
+credentials. Whatever system you use, secrets must be present as environment
+variables in the MCP server process at startup.
+
+GIF's governance scope covers what the AI does with its tools. Credential
+management for those tools is the adopter's operational concern.
+
+---
+
 ## 7. Smoke test
 
 With gif running, verify the core path end-to-end.
