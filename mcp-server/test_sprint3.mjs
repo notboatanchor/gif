@@ -21,7 +21,7 @@
 
 import pg from 'pg';
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const { Pool } = pg;
 
@@ -174,7 +174,7 @@ try {
 
 console.log('\n[sprint3] Test 3: blocked_at correctness (enforcement layer name)');
 
-const transport = new SSEClientTransport(new URL('http://localhost:3100/sse'));
+const transport = new StreamableHTTPClientTransport(new URL('http://localhost:3100/mcp'));
 const mcp = new McpClient({ name: 'sprint3-test', version: '0.1.0' }, { capabilities: {} });
 await mcp.connect(transport);
 

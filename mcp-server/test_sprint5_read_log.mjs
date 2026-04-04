@@ -11,7 +11,7 @@
 
 import pg from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const { Pool } = pg;
 
@@ -32,7 +32,7 @@ function fail(label, detail) {
 const MCP_URL = process.env.MCP_BASE_URL || 'http://localhost:3100';
 
 async function callTool(toolName, args) {
-  const transport = new SSEClientTransport(new URL(`${MCP_URL}/sse`));
+  const transport = new StreamableHTTPClientTransport(new URL(`${MCP_URL}/mcp`));
   const client = new Client({ name: 'test-sprint5-readlog', version: '0.1.0' }, { capabilities: {} });
   await client.connect(transport);
   try {

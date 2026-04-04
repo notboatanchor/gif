@@ -16,7 +16,7 @@
 
 import pg from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const { Pool } = pg;
 const SERVER_URL = 'http://localhost:3100';
@@ -61,7 +61,7 @@ if (adminRow.rows.length === 0) {
 }
 const ADMIN_PERSONA_ID = adminRow.rows[0].persona_id;
 
-const transport = new SSEClientTransport(new URL(`${SERVER_URL}/sse`));
+const transport = new StreamableHTTPClientTransport(new URL(`${SERVER_URL}/mcp`));
 const client    = new Client({ name: 'sprint4-test', version: '1.0.0' }, { capabilities: {} });
 await client.connect(transport);
 
