@@ -43,10 +43,9 @@ try {
       'Integration test persona — sprint 3/4 validation',
       'test_setup',
       '{
-        "permitted_actions": ["read", "write", "search", "manage_personas"],
-        "permitted_sources": ["audit_events", "personas", "sessions", "scope_violations", "searxng", "tool_registry", "delegation_chain", "revocation_log"],
-        "permitted_destinations": ["audit_events", "synthesis_outputs"],
-        "output_destinations": ["synthesis_outputs"],
+        "permitted_actions": ["read", "write", "manage_personas"],
+        "permitted_sources": ["audit_events", "personas", "sessions", "scope_violations", "tool_registry", "delegation_chain", "revocation_log"],
+        "output_destinations": ["user_persona_assignments"],
         "max_results": 100
       }'::jsonb,
       now() + interval '30 days',

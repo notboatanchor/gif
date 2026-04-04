@@ -3,7 +3,7 @@
 // Sprint 4 integration test — Integration Hardening
 //
 // Covers:
-//   1. Tool registry — all 6 active tools present, 3 gif-layer, correct sprint
+//   1. Tool registry — all 5 active tools present, 3 gif-layer, correct sprint
 //   2. Delegation chain — child persona written to delegation_chain
 //   3. Delegation scope enforcement — child scope exceeding parent is rejected
 //   4. Delegation depth enforcement — exceeding max_delegation_depth is rejected
@@ -11,7 +11,7 @@
 //   6. Post-revocation tool call is blocked — persona validation rejects revoked
 //
 // Run: node test_sprint4.mjs
-// Requires: MCP server running on port 3100, gif_research DB accessible
+// Requires: MCP server running on port 3100
 // =============================================================================
 
 import pg from 'pg';
@@ -85,10 +85,10 @@ try {
   const activeTools = registryResult.rows ?? [];
   const gifTools    = activeTools.filter(t => t.tool_layer === 'gif');
 
-  if (activeTools.length === 6) {
-    pass(1, `tool_registry has 6 active tools`);
+  if (activeTools.length === 5) {
+    pass(1, `tool_registry has 5 active tools`);
   } else {
-    fail(1, `Expected 6 active tools, got ${activeTools.length}`);
+    fail(1, `Expected 5 active tools, got ${activeTools.length}`);
   }
 
   if (gifTools.length === 3) {
@@ -107,9 +107,8 @@ try {
     purpose:              'Parent persona for delegation chain test',
     created_by:           'test_sprint4.mjs',
     scope_definition:     JSON.stringify({
-      permitted_sources:  ['searxng', 'personas'],
-      permitted_actions:  ['read', 'synthesize'],
-      output_destinations: ['synthesis_outputs'],
+      permitted_sources:  ['personas', 'audit_events'],
+      permitted_actions:  ['read', 'write'],
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     max_delegation_depth: 2,
@@ -130,9 +129,8 @@ try {
     purpose:              'Child persona for delegation chain test',
     created_by:           'test_sprint4.mjs',
     scope_definition:     JSON.stringify({
-      permitted_sources:  ['searxng'],          // subset of parent
+      permitted_sources:  ['personas'],          // subset of parent
       permitted_actions:  ['read'],              // subset of parent
-      output_destinations: ['synthesis_outputs'],
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     max_delegation_depth: 1,
@@ -172,8 +170,7 @@ try {
     purpose:              'Persona attempting to exceed parent scope',
     created_by:           'test_sprint4.mjs',
     scope_definition:     JSON.stringify({
-      permitted_actions:  ['read', 'synthesize', 'write'],  // 'write' not in parent
-      output_destinations: ['synthesis_outputs'],
+      permitted_actions:  ['read', 'write', 'manage_personas'],  // 'manage_personas' not in parent
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     parent_persona_id:    parentPersonaId,
@@ -198,7 +195,6 @@ try {
     created_by:           'test_sprint4.mjs',
     scope_definition:     JSON.stringify({
       permitted_actions:  ['read'],
-      output_destinations: ['synthesis_outputs'],
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     parent_persona_id:    childPersonaId,
@@ -221,9 +217,8 @@ try {
     purpose:          'Persona created to test revocation session handling',
     created_by:       'test_sprint4.mjs',
     scope_definition: JSON.stringify({
-      permitted_sources:  ['searxng'],
+      permitted_sources:  ['audit_events'],
       permitted_actions:  ['read'],
-      output_destinations: ['synthesis_outputs'],
     }),
     valid_until:      '2026-06-30T00:00:00Z',
   });
@@ -234,11 +229,7 @@ try {
     fail(8, `Could not create revocation target persona: ${JSON.stringify(revokeTargetResult)}`);
   } else {
 
-    // Open a session on the target persona by making a tool call
-    // (web_search creates and closes a session; we need to verify sessions are
-    //  captured. Since MCP sessions close after each tool call, we check the
-    //  DB directly for sessions that were closed during revocation.)
-    // Instead: verify that revocation returns sessions_terminated field and
+    // Verify that revocation returns sessions_terminated field and
     // the revocation_log records it accurately.
 
     const revokeResult = await callTool(client, 'persona_revoke', {

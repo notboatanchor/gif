@@ -1,6 +1,6 @@
 // test_mcp.mjs
 // =============================================================================
-// MCP server end-to-end test — connects via Streamable HTTP, exercises web_search and db_read.
+// MCP server end-to-end test — connects via Streamable HTTP, exercises db_read.
 //
 // Discovers the test persona dynamically (same pattern as test_sprint4.mjs).
 // Requires: MCP server running on port 3100, test_setup.mjs run first.
@@ -12,7 +12,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const { Pool } = pg;
 
-// Discover persona from DB — must have read + search scope
+// Discover persona from DB — must have read scope
 const pool = new Pool({
   host:     process.env.PGHOST     || 'localhost',
   port:     parseInt(process.env.PGPORT || '5432'),
@@ -25,13 +25,12 @@ const row = await pool.query(
   `SELECT persona_id FROM gif.personas
    WHERE status = 'active'
      AND scope_definition->'permitted_actions' ? 'read'
-     AND scope_definition->'permitted_actions' ? 'search'
    LIMIT 1`
 );
 await pool.end();
 
 if (row.rows.length === 0) {
-  console.error('[test_mcp] No active persona with read+search scope — run test_setup.mjs first');
+  console.error('[test_mcp] No active persona with read scope — run test_setup.mjs first');
   process.exit(1);
 }
 
@@ -44,19 +43,7 @@ const client = new Client({ name: 'test-client', version: '0.1.0' }, { capabilit
 await client.connect(transport);
 console.log('[test_mcp] Connected');
 
-// Test 1: web_search
-console.log('[test_mcp] Calling web_search...');
-const searchResult = await client.callTool({
-  name: 'web_search',
-  arguments: {
-    persona_id: PERSONA_ID,
-    query:      'federal contracting news',
-    max_results: 3,
-  },
-});
-console.log('[test_mcp] web_search result:', JSON.stringify(searchResult, null, 2));
-
-// Test 2: db_read
+// db_read — round-trip through enforcement engine: validate, session, audit, close
 console.log('[test_mcp] Calling db_read...');
 const dbResult = await client.callTool({
   name: 'db_read',

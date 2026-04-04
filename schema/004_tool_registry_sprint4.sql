@@ -49,7 +49,7 @@ UPDATE tool_registry
 SET
     status     = 'active',
     updated_at = now()
-WHERE tool_name IN ('web_search', 'db_read', 'db_write');
+WHERE tool_name IN ('db_read', 'db_write');
 
 -- ---------------------------------------------------------------------------
 -- Register GIF framework tools
@@ -103,7 +103,7 @@ VALUES
 
 UPDATE tool_registry
 SET tool_layer = 'adopter'
-WHERE tool_name IN ('web_search', 'db_read', 'db_write', 'source_score', 'graph_query');
+WHERE tool_name IN ('db_read', 'db_write', 'source_score', 'graph_query');
 
 -- ---------------------------------------------------------------------------
 -- Verify
@@ -119,8 +119,8 @@ BEGIN
     SELECT count(*) INTO gif_count     FROM tool_registry WHERE tool_layer = 'gif';
     SELECT count(*) INTO planned_count FROM tool_registry WHERE status = 'planned';
 
-    IF active_count <> 6 THEN
-        RAISE EXCEPTION 'Expected 6 active tools, found %', active_count;
+    IF active_count <> 5 THEN
+        RAISE EXCEPTION 'Expected 5 active tools, found %', active_count;
     END IF;
 
     IF gif_count <> 3 THEN

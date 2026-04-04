@@ -325,12 +325,6 @@ COMMENT ON TABLE tool_registry IS
 -- Seed Phase 1 tools per GIF Technical Spec section 4
 INSERT INTO tool_registry (tool_name, description, status, default_constraints, available_from_sprint)
 VALUES
-    ('web_search',
-     'SearXNG self-hosted search wrapper with persona scope validation.',
-     'planned',
-     '{"rate_limit_per_session": 20, "result_count_cap": 10}',
-     2),
-
     ('db_read',
      'Postgres read. Entity lookup, run history, source registry. Table-level permission per persona scope.',
      'planned',

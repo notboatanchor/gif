@@ -10,7 +10,6 @@
 //   5. Point-in-time reconstruction — full action history for a persona_id + window
 //
 // Prerequisites:
-//   - 002_gif_core.sql applied to gif_research
 //   - MCP server running on port 3100
 //   - A valid active persona exists in the database
 //   - Environment: PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD set (or defaults)
@@ -186,13 +185,13 @@ const violationsBefore = await pool.query(
 const countBefore = parseInt(violationsBefore.rows[0].cnt);
 
 // Trigger a scope violation: db_read on a table the persona cannot access.
-// synthesis_outputs is in ALLOWED_READ_TABLES but will fail scope check
-// unless persona explicitly lists it in permitted_sources.
+// retention_holds is in ALLOWED_READ_TABLES but will fail scope check
+// unless the persona explicitly lists it in permitted_sources.
 const scopeTestResult = await mcp.callTool({
   name: 'db_read',
   arguments: {
     persona_id: personaId,
-    table: 'synthesis_outputs',
+    table: 'retention_holds',
     limit: 1,
   },
 });
@@ -224,7 +223,7 @@ if (countAfter > countBefore) {
 } else {
   // No new violation — persona may actually have access to synthesis_outputs
   // Skip this test with a note
-  console.log('  [SKIP] No scope violation triggered — persona may have synthesis_outputs access');
+  console.log('  [SKIP] No scope violation triggered — persona may have retention_holds access');
   console.log('         Verify blocked_at manually: SELECT blocked_at FROM scope_violations ORDER BY occurred_at DESC LIMIT 5;');
 }
 
@@ -235,13 +234,11 @@ if (countAfter > countBefore) {
 console.log('\n[sprint3] Test 4: purpose_declared populated on audit events');
 
 // Make a tool call using a table in this persona's permitted_sources.
-// 'entities' is a safe default — present in the GIF core schema and commonly
-// in permitted_sources for test personas.
 await mcp.callTool({
   name: 'db_read',
   arguments: {
     persona_id: personaId,
-    table: 'entities',
+    table: 'sessions',
     limit: 1,
   },
 });

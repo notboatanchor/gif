@@ -11,8 +11,8 @@
 // knowledge of which tools are registered or what they do.
 //
 // GIF framework tools (persona_validate, persona_create, persona_revoke)
-// ship with the enforcement engine. Adopter tools (web_search, db_read,
-// db_write) are registered here as part of this reference implementation.
+// ship with the enforcement engine. Adopter tools (db_read, db_write)
+// are registered here as part of this reference implementation.
 //
 // ADR-026: MCP server deployment topology
 // ADR-027: GIF packaging model and extraction progression
@@ -26,9 +26,8 @@ import { handler as personaCreateHandler   } from './persona_create.js';
 import { handler as personaRevokeHandler   } from './persona_revoke.js';
 
 // Reference implementation adopter tools
-import { handler as webSearchHandler } from './web_search.js';
-import { handler as dbReadHandler    } from './db_read.js';
-import { handler as dbWriteHandler   } from './db_write.js';
+import { handler as dbReadHandler  } from './db_read.js';
+import { handler as dbWriteHandler } from './db_write.js';
 
 // ---------------------------------------------------------------------------
 // TOOL_REGISTRY
@@ -43,7 +42,6 @@ export const TOOL_REGISTRY = new Map<string, ToolHandler>([
   [personaRevokeHandler.definition.name,   personaRevokeHandler],
 
   // Adopter tools — reference implementation
-  [webSearchHandler.definition.name, webSearchHandler],
-  [dbReadHandler.definition.name,    dbReadHandler],
-  [dbWriteHandler.definition.name,   dbWriteHandler],
+  [dbReadHandler.definition.name,  dbReadHandler],
+  [dbWriteHandler.definition.name, dbWriteHandler],
 ]);
