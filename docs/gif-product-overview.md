@@ -178,6 +178,8 @@ The positioning is precise: GIF provides the authorization substrate and the str
 
 **Persona design.** Adopters define what personas exist, what their declared purposes are, and what scope each is granted. GIF enforces the structure; adopters design it for their governance requirements.
 
+**Runtime identity.** GIF structurally records the provisioning human for every Persona (the administrator who created it). It does not automatically capture the human whose account the AI is running under at runtime — that is the adopter's obligation. The responsible human ID must be passed in `invocation_context` on every MCP invocation. For AI operating under a service or system account, both the service account and the accountable human must be identified. For AI spawning sub-agents, the responsible human context must be propagated through the delegation chain. GIF provides attachment points; adopters must populate them. The full contract is in `docs/adopter-invocation-context.md`.
+
 **Identity integration.** GIF defines the invariants of the user-to-persona binding model but does not integrate with identity providers. Adopters connect their user management system — SSO, LDAP, internal admin tooling — to persona administration.
 
 **Application logic.** The AI application that determines which persona to invoke, which tools to call, and what to do with results is the adopter's concern. GIF is infrastructure, not application.
@@ -236,6 +238,10 @@ GIF runs under Docker Compose and is fully reproducible from the repository and 
 | Enforcement packaging (importable module) | Complete |
 | Schema isolation and per-adopter credentials | Complete |
 
+| Provisioner identity binding (identity token at persona_create) | Complete |
+| Governance review gate (`governance_review_status = 'approved'` required for dispatch) | Complete |
+| `admin_read` gate on personas table (prevents AI enumeration of persona UUIDs) | Complete |
+
 Validated end-to-end: persona creation through tool execution through audit record through scope violation detection.
 
 ---
@@ -247,7 +253,7 @@ GIF's architectural foundations are correct for regulated-industry deployment. T
 | Item | What It Closes | Priority |
 |---|---|---|
 | **Cryptographic log signing** (hash chains + external timestamping) | DBA/infrastructure-level audit tampering; AU-9(3) cryptographic protection; non-repudiation for evidentiary use | Near-term — before first regulated-industry deployment |
-| **User-to-persona identity binding with verification** | Individual human accountability through the delegation chain; SOC 2 CC6.2; HIPAA workforce accountability requirement | Near-term — before first regulated-industry deployment |
+| **Runtime session binding** (structural AI-to-persona authorization) | Closes the bearer token gap: cryptographic proof that the AI making tool calls is the authorized holder of its persona_id, not just a process that knows the UUID. Provisioner accountability is already structural (GIF-014). Session binding is a contributor project for high-assurance deployments. | Contributor project — see CONTRIBUTING.md |
 | **Read-access audit logging** | Chain of custody for the audit trail itself; demonstrates that access to audit records is itself tracked | Near-term |
 | **Retention policies and automated archival** | SOX 7-year retention, HIPAA 6-year minimum; automated enforcement that audit data is not prematurely destroyed; legal hold capability | Near-term |
 | **Segregation of duties enforcement** | SOX ICFR requirement; prevents the same persona from performing incompatible duties | Medium-term |

@@ -25,6 +25,7 @@ as a versioned git dependency.
 | `gif-enforcement` as versioned git dependency | Adopters pin to tags via SSH; no `file:` refs, no floating branches |
 | Schema isolation | `gif` schema owns all GIF objects; per-adopter app users carry only required grants |
 | Enforcement packaging | Adopters import `createEnforcement` and inject their own pool — no GIF source modification |
+| `persona_id` as bearer token | Any process that knows a `persona_id` can call tools under that identity — audit trail + mandatory provisioner identity is the mitigation; structural session binding is a contributor project (GIF-014) |
 
 ---
 
@@ -52,13 +53,29 @@ tag in this repo and a dependency update in all adopter repos.
 **No secrets in repository.** `.env` is gitignored. Credentials in the password
 manager and `.env` only.
 
+**`identity_token` is mandatory at `persona_create`.** Every persona must have a
+verified human identity on record at provisioning time. `identity_token` is
+required in both the TypeScript type and `inputSchema.required`. Do not suggest
+making it optional.
+
+**`personas` table is gated behind `admin_read`.** `personas` is not in
+`ALLOWED_READ_TABLES`. It is in `ADMIN_READ_TABLES` and requires the `admin_read`
+action. An AI doing legitimate work has no reason to enumerate other personas.
+
+**`governance_review_status` must be `approved` for dispatch.** `_validatePersona`
+blocks any persona with a status other than `approved`. Do not suggest weakening
+or bypassing this check.
+
 ---
 
 ## Compliance Hardening Roadmap
 
 Near-term items before first regulated-industry deployment:
 - Cryptographic log signing (hash chains + external timestamping)
-- User-to-persona identity binding with verification
+- User-to-persona identity binding with verification — provisioner accountability
+  is done (mandatory `identity_token` at `persona_create`); runtime session
+  binding (structural proof that the AI making calls holds the assigned
+  `persona_id`) is deferred to a contributor project per GIF-014
 
 Medium-term:
 - Agent-to-agent delegation within sessions

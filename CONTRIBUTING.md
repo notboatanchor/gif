@@ -29,7 +29,7 @@ Before contributing code, read [`docs/gif-101.md`](docs/gif-101.md) — it expla
 **Submitting a pull request:**
 1. Fork the repo and create a branch from `main`
 2. Make your changes
-3. Run the full test suite — `npm test` from `mcp-server/` — and confirm all 38 tests pass
+3. Run the full test suite — `npm test` from `mcp-server/` — and confirm all 48 tests pass
 4. Follow the commit conventions: `feat:`, `fix:`, `chore:`, `schema:`, `docs:`
 5. Open a PR with a description of what changed and why
 
@@ -68,7 +68,9 @@ These are ideas that would add value to the GIF ecosystem. They are not on the c
 
 **Semantic audit classification layer.** A post-processing layer that classifies audit records by data type (financial, PII, health data, etc.) based on tool registry metadata. Enables queries like "show all AI access to financial data this week." Built on top of the audit trail, no changes to GIF core required.
 
-**Identity provider integration.** A reference implementation connecting a real identity provider (Auth0, Okta, or similar) to GIF's user-persona assignment model. Would demonstrate the full accountability chain from human SSO identity through Persona to audit record.
+**Runtime session binding (structural AI-to-persona authorization).** Today, `persona_id` is a bearer token — any process that knows it can call tools under that identity. GIF-014 documents why this is acceptable for general deployments and what mitigates the risk. For adopters with high-assurance runtime authorization requirements — regulated industries, multi-tenant deployments, or environments where cryptographic proof of authorization is required — a session binding mechanism would close this gap. The design: at MCP session initialization, the AI presents its `assignment_id` (the persistent credential returned by `persona_create`). GIF validates the assignment, records the MCP session → persona binding, and rejects tool calls where the claimed `persona_id` does not match the binding. Extension points are already in place: the `transports` map in `index.ts` (keyed by MCP session ID), `user_persona_assignments.assignment_id`, and a new `session_bindings` table for the audit record. This would live in GIF core as an opt-in enforcement mode, not a breaking change to the default behavior.
+
+**Agent identity bridge.** GIF guarantees that every persona has a provisioning human on record, but runtime operator accountability — which human account an AI is running as, and which service account intermediates that — is an adopter obligation (GIF-013). Today, adopters fulfill this by passing free-form JSON into `invocation_context`. An agent identity bridge would make this structured and reusable: integrate with a real IdP (GitHub OAuth is a concrete starting point), manage the assignment lifecycle via API rather than CLI, track runtime sessions (agent + service account + authorizing human), and produce the structured `invocation_context` payload GIF expects. The `scripts/issue_identity_token.mjs` CLI in this repo is the seed of this component. The bridge would live as a separate repository — it is adopter infrastructure, not GIF core (GIF-012).
 
 **Audit trail export.** A scheduled export of audit records to object storage (S3, GCS) for long-term retention and SIEM integration. Relevant for regulated-industry deployments with multi-year retention requirements.
 

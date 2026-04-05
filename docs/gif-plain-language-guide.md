@@ -79,6 +79,7 @@ An adopter integrates GIF by:
 4. **Managing application secrets** in environment variables accessible to the MCP server process. API keys and tokens for the adopter's application live in `.env` for development, or in the adopter's secret management infrastructure for production. GIF does not store or manage application credentials — that is the adopter's operational concern.
 5. **Designing Personas** for the AI workloads that will run in their system — declaring purpose and scope for each governance identity. A general-purpose AI assistant might be scoped to read-only tools. A purpose-built automation agent running a specific workflow gets exactly the tools that workflow requires, declared explicitly.
 6. **Connecting their administrative interface** — however the adopter manages user identities and administrative actions, Persona creation and revocation are exposed as standard MCP operations.
+7. **Passing runtime identity on every invocation.** GIF structurally records the human who provisioned each Persona. It does not automatically capture the human whose account the AI is running under at runtime — that is the adopter's obligation. The identifier of the responsible human must be present in `invocation_context` on every MCP call. For AI running under a service or system account, the human responsible for that system must also be identified. Without this, the audit trail has a runtime accountability gap. See [`docs/adopter-invocation-context.md`](adopter-invocation-context.md) for the full contract.
 
 A reference implementation is included in the repository that demonstrates this pattern end-to-end: tool handlers, Personas with different scope levels, permitted calls, scope violations, and delegation. Any new product or tool integration follows the same pattern without touching GIF's core.
 
@@ -140,5 +141,11 @@ A rule that governs whether an AI should be allowed to correlate multiple data s
 **Partition / Audit Archival**
 Audit records are stored in monthly database partitions. After a defined retention period, old partitions can be retired (dropped) — but only through a governed procedure that checks for active legal holds, logs the retirement event, and requires explicit administrative action. You cannot accidentally lose audit history.
 
+**Provisioner Accountability**
+Every Persona has a provisioning human on structural record — the administrator who created it, captured at creation time via the identity token mechanism. This is a guaranteed invariant: a Persona cannot be created without a named human on record.
+
+**Runtime Operator Accountability**
+The human whose account an AI is running under at the moment it makes tool calls. This is distinct from the provisioning human and is not automatically captured by GIF — it is the adopter's obligation to pass it in on every invocation. For simple deployments, the provisioner and runtime operator are the same person. For product deployments with multiple users or service accounts, they may differ. GIF provides the attachment point (`invocation_context`); the adopter is responsible for populating it.
+
 **Human Actor ID**
-The identifier of the human who took an administrative action — for example, the administrator who created or revoked a Persona. Captured on audit events so that every Persona traces to a real human decision, not just an automated process.
+The identifier of a human who directly participated in a specific audit event — for example, a human reviewer who approved a flagged AI action or an administrator who revoked a Persona. Distinct from runtime operator identity. An absent `human_actor_id` on an event is meaningful: it indicates the event was AI-only, with no human in the loop at that moment.
