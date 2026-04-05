@@ -259,6 +259,15 @@ export async function executePersonaCreate(
   // it is an authentication failure, not an authorization failure.
   // ---------------------------------------------------------------------------
 
+  if (!args.identity_token) {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        error: 'identity_token is required',
+      }) }],
+      isError: true,
+    };
+  }
+
   const binding = await verifyIdentityBinding({ identityToken: args.identity_token });
   if (!binding.valid) {
     return {
@@ -333,7 +342,7 @@ export async function executePersonaCreate(
         valid_until:            args.valid_until,
         parent_persona_id:      args.parent_persona_id ?? null,
         delegation_depth:       args.parent_persona_id ? delegationDepth : null,
-        identity_assignment_id: identityAssignmentId ?? null,
+        identity_assignment_id: identityAssignmentId,
         created:                true,
       }) }],
     };

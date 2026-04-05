@@ -14,9 +14,23 @@
 // Requires: MCP server running on port 3100
 // =============================================================================
 
+import crypto from 'crypto';
 import pg from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+// ---------------------------------------------------------------------------
+// Identity token helper (mirrors src/cli/issue_identity_token.ts)
+// ---------------------------------------------------------------------------
+
+function issueToken(assignmentId, secret) {
+  const payload = Buffer.from(JSON.stringify({
+    assignment_id: assignmentId,
+    issued_at:     new Date().toISOString(),
+  })).toString('base64url');
+  const hmac = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return `${payload}.${hmac}`;
+}
 
 const { Pool } = pg;
 const SERVER_URL = 'http://localhost:3100';
@@ -53,13 +67,36 @@ const adminRow = await pool.query(
      AND scope_definition->'permitted_actions' ? 'manage_personas'
    LIMIT 1`
 );
-await pool.end();
 
 if (adminRow.rows.length === 0) {
   console.error('[sprint4] No persona with manage_personas found — run test_setup.mjs first');
+  await pool.end();
   process.exit(1);
 }
 const ADMIN_PERSONA_ID = adminRow.rows[0].persona_id;
+
+const hmacSecret = process.env.IDENTITY_HMAC_SECRET;
+if (!hmacSecret) {
+  console.error('[sprint4] IDENTITY_HMAC_SECRET not set — required for persona_create calls');
+  await pool.end();
+  process.exit(1);
+}
+
+// Create a real assignment record and return a token for it.
+// persona_create requires the assignment_id to exist in user_persona_assignments.
+async function issueAssignedToken(personaId) {
+  const result = await pool.query(
+    `INSERT INTO gif.user_persona_assignments
+       (external_user_id, persona_id, assigned_by, purpose_for_assignment,
+        verified_identity_ref, identity_provider_hint)
+     VALUES ('test-runner-sprint4', $1, 'test_sprint4.mjs', 'Sprint 4 delegation chain test',
+             'test-identity', 'local-test')
+     RETURNING assignment_id`,
+    [personaId]
+  );
+  const assignmentId = result.rows[0].assignment_id;
+  return issueToken(assignmentId, hmacSecret);
+}
 
 const transport = new StreamableHTTPClientTransport(new URL(`${SERVER_URL}/mcp`));
 const client    = new Client({ name: 'sprint4-test', version: '1.0.0' }, { capabilities: {} });
@@ -112,6 +149,7 @@ try {
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     max_delegation_depth: 2,
+    identity_token:       await issueAssignedToken(ADMIN_PERSONA_ID),
   });
 
   parentPersonaId = parentResult.persona_id;
@@ -135,6 +173,7 @@ try {
     valid_until:          '2026-06-30T00:00:00Z',
     max_delegation_depth: 1,
     parent_persona_id:    parentPersonaId,
+    identity_token:       await issueAssignedToken(ADMIN_PERSONA_ID),
   });
 
   childPersonaId = childResult.persona_id;
@@ -174,6 +213,7 @@ try {
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     parent_persona_id:    parentPersonaId,
+    identity_token:       await issueAssignedToken(ADMIN_PERSONA_ID),
   });
 
   if (exceededScopeResult.error && exceededScopeResult.error.includes('exceeds parent scope')) {
@@ -198,6 +238,7 @@ try {
     }),
     valid_until:          '2026-06-30T00:00:00Z',
     parent_persona_id:    childPersonaId,
+    identity_token:       await issueAssignedToken(ADMIN_PERSONA_ID),
   });
 
   if (grandchildResult.error && grandchildResult.error.includes('max_delegation_depth')) {
@@ -221,6 +262,7 @@ try {
       permitted_actions:  ['read'],
     }),
     valid_until:      '2026-06-30T00:00:00Z',
+    identity_token:   await issueAssignedToken(ADMIN_PERSONA_ID),
   });
 
   revocationTargetId = revokeTargetResult.persona_id;
@@ -292,4 +334,5 @@ try {
   }
 
   await client.close();
+  await pool.end();
 }

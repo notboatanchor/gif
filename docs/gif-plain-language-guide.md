@@ -63,10 +63,6 @@ GIF runs on your own server. There is no cloud service, no data leaving your net
 - `gif_admin` — the administrative account that owns the schema and runs migrations. Used only for setup and maintenance.
 - `gif_app` — the application account that the running server uses. It has exactly the permissions it needs and nothing more. Critically, it *cannot* modify or delete audit records — only insert new ones.
 
-**Backups:**
-- `pg_dump` runs daily and weekly via a systemd scheduled job
-- Backups sync offsite automatically
-
 **To reproduce the full environment from scratch:** the repository plus the `.env` file is everything needed. The installer scripts handle database setup, role creation, and schema migrations in the right order.
 
 ---
