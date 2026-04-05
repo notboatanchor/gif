@@ -37,38 +37,40 @@ try {
   // Persona 1: admin test persona (manage_personas + read + write scope, delegation depth 3)
   await pool.query(`
     INSERT INTO gif.personas
-      (issuing_entity, purpose, created_by, scope_definition, valid_until, status, max_delegation_depth)
+      (issuing_entity, purpose, created_by, scope_definition, valid_until, status, max_delegation_depth, governance_review_status)
     VALUES (
       'test-setup',
       'Integration test persona — sprint 3/4 validation',
       'test_setup',
       '{
         "permitted_actions": ["read", "write", "manage_personas"],
-        "permitted_sources": ["audit_events", "personas", "sessions", "scope_violations", "tool_registry", "delegation_chain", "revocation_log"],
+        "permitted_sources": ["audit_events", "sessions", "scope_violations", "tool_registry", "delegation_chain", "revocation_log"],
         "output_destinations": ["user_persona_assignments"],
         "max_results": 100
       }'::jsonb,
       now() + interval '30 days',
       'active',
-      3
+      3,
+      'approved'
     )
   `);
 
   // Persona 2: audit reader persona (for sprint5 read log tests)
   await pool.query(`
     INSERT INTO gif.personas
-      (issuing_entity, purpose, created_by, scope_definition, valid_until, status)
+      (issuing_entity, purpose, created_by, scope_definition, valid_until, status, governance_review_status)
     VALUES (
       'test-setup',
       'Audit read test persona — sprint 5 read log validation',
       'test_setup',
       '{
         "permitted_actions": ["read"],
-        "permitted_sources": ["audit_events", "personas"],
+        "permitted_sources": ["audit_events", "tool_registry"],
         "max_results": 50
       }'::jsonb,
       now() + interval '30 days',
-      'active'
+      'active',
+      'approved'
     )
   `);
 

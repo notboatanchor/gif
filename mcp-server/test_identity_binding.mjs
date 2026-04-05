@@ -6,7 +6,7 @@
 //   1. persona_create with a valid token succeeds and consumes the token
 //   2. Re-use of a consumed token is rejected
 //   3. A tampered token (bad HMAC) is rejected
-//   4. persona_create without identity_token still works (optional field)
+//   4. persona_create without identity_token is rejected (required field)
 //   5. Consumed assignment has token_consumed_at set
 //   6. Successful persona_create audit event has human_actor_id populated
 // =============================================================================
@@ -203,30 +203,22 @@ try {
     fail('Tampered token (bad HMAC) is rejected', content3);
   }
 
-  // Test 6: persona_create without identity_token still works (optional)
+  // Test 6: persona_create without identity_token is rejected (required field)
   const result4 = await callTool('persona_create', {
     persona_id:       issuerId,
     issuing_entity:   'test_runner',
-    purpose:          'Sprint 5 no-token persona (legacy path)',
+    purpose:          'Should fail — no identity_token',
     created_by:       'test_sprint5',
     scope_definition: scope,
     valid_until:      '2027-01-01T00:00:00Z',
     // no identity_token
   });
-  const content4 = result4?.content?.[0]?.text;
-  if (content4) {
-    try {
-      const parsed = JSON.parse(content4);
-      if (parsed.created && parsed.persona_id && parsed.identity_assignment_id === null) {
-        pass('persona_create without identity_token succeeds (identity_assignment_id = null)');
-      } else {
-        fail('persona_create without identity_token succeeds', content4);
-      }
-    } catch {
-      fail('persona_create without identity_token succeeds', content4);
-    }
+  const content4 = result4?.content?.[0]?.text ?? '';
+  if (result4?.isError || content4.includes('binding') || content4.includes('token') || content4.includes('required')) {
+    pass('persona_create without identity_token is rejected');
   } else {
-    fail('persona_create without identity_token succeeds', JSON.stringify(result4));
+    fail('persona_create without identity_token is rejected',
+      `Expected rejection, got: ${content4}`);
   }
 
   // Test 7: human_actor_id is set on the audit event for the token-bound creation

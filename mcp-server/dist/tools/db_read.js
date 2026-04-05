@@ -29,9 +29,13 @@ const persona_js_1 = require("../persona.js");
 // considered in the permission model.
 // Add tables here as new schema extensions are deployed.
 // ----------------------------------------------------------------------------
+// Tables requiring 'admin_read' in permitted_actions (lateral movement vector if
+// freely readable by AI personas). Only human admin tooling should enumerate these.
+const ADMIN_READ_TABLES = new Set([
+    'personas',
+]);
 // GIF schema tables. Adopters: add domain-specific table names here.
 const ALLOWED_READ_TABLES = new Set([
-    'personas',
     'audit_events',
     'scope_violations',
     'delegation_chain',
@@ -56,9 +60,10 @@ const AUDIT_CLASS_TABLES = new Set([
 // ----------------------------------------------------------------------------
 function checkDbReadScope(persona, table) {
     const scope = persona.scope_definition;
+    const requiredAction = ADMIN_READ_TABLES.has(table) ? 'admin_read' : 'read';
     // Fail-closed: absent or empty permitted_actions is a scope violation, not a pass.
-    if (!scope.permitted_actions || !scope.permitted_actions.includes('read')) {
-        return `Persona ${persona.persona_id} does not have 'read' in permitted_actions`;
+    if (!scope.permitted_actions || !scope.permitted_actions.includes(requiredAction)) {
+        return `Persona ${persona.persona_id} does not have '${requiredAction}' in permitted_actions`;
     }
     // Fail-closed: absent or empty permitted_sources is a scope violation, not a pass.
     if (!scope.permitted_sources || !scope.permitted_sources.includes(table)) {
@@ -72,7 +77,7 @@ function checkDbReadScope(persona, table) {
 async function executeDbRead(args, persona, sessionId) {
     const { table, filters, limit } = args;
     // Allowlist check — before scope check to avoid leaking table names
-    if (!ALLOWED_READ_TABLES.has(table)) {
+    if (!ALLOWED_READ_TABLES.has(table) && !ADMIN_READ_TABLES.has(table)) {
         return {
             content: [{ type: 'text', text: JSON.stringify({
                         error: `Table '${table}' is not accessible via db_read`,

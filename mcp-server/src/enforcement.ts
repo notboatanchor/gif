@@ -82,7 +82,8 @@ export type PersonaInvalidReason =
   | 'NOT_ACTIVE'
   | 'EXPIRED'
   | 'NOT_YET_VALID'
-  | 'DB_ERROR';
+  | 'DB_ERROR'
+  | 'GOVERNANCE_REVIEW_REQUIRED';
 
 export type IdentityBindingResult =
   | { valid: true;  assignmentId: string; externalUserId: string }
@@ -270,6 +271,14 @@ async function _validatePersona(
       valid:   false,
       reason:  'EXPIRED',
       message: `Persona ${personaId} has expired (valid_until: ${persona.valid_until.toISOString()})`,
+    };
+  }
+
+  if (persona.governance_review_status !== 'approved') {
+    return {
+      valid:   false,
+      reason:  'GOVERNANCE_REVIEW_REQUIRED',
+      message: `Persona ${personaId} is not approved for use (governance_review_status: ${persona.governance_review_status})`,
     };
   }
 

@@ -201,29 +201,23 @@ async function executePersonaCreate(args, persona, sessionId) {
         }
     }
     // ---------------------------------------------------------------------------
-    // Identity binding verification (Sprint 5)
+    // Identity binding verification
     //
-    // When identity_token is provided, verify it before inserting the persona.
+    // identity_token is required. Verify it before inserting the persona.
     // The token is HMAC-signed by the issue_identity_token CLI and single-use.
     // Rejection here does not create a persona or a scope violation record —
     // it is an authentication failure, not an authorization failure.
-    //
-    // When identity_token is absent, persona creation proceeds without binding
-    // (legacy behaviour — tokens are optional for development workflows).
     // ---------------------------------------------------------------------------
-    let identityAssignmentId;
-    if (args.identity_token) {
-        const binding = await (0, persona_js_1.verifyIdentityBinding)({ identityToken: args.identity_token });
-        if (!binding.valid) {
-            return {
-                content: [{ type: 'text', text: JSON.stringify({
-                            error: `Identity binding verification failed: ${binding.reason}`,
-                        }) }],
-                isError: true,
-            };
-        }
-        identityAssignmentId = binding.assignmentId;
+    const binding = await (0, persona_js_1.verifyIdentityBinding)({ identityToken: args.identity_token });
+    if (!binding.valid) {
+        return {
+            content: [{ type: 'text', text: JSON.stringify({
+                        error: `Identity binding verification failed: ${binding.reason}`,
+                    }) }],
+            isError: true,
+        };
     }
+    const identityAssignmentId = binding.assignmentId;
     // ---------------------------------------------------------------------------
     // Insert persona (and delegation_chain record if delegated) — atomic
     // ---------------------------------------------------------------------------
@@ -311,9 +305,9 @@ exports.handler = {
                 valid_from: { type: 'string', description: 'ISO 8601 datetime when persona becomes valid (defaults to now)' },
                 max_delegation_depth: { type: 'number', minimum: 0, default: 0, description: 'Maximum delegation hops allowed (0 = no delegation)' },
                 parent_persona_id: { type: 'string', format: 'uuid', description: 'UUID of parent persona for delegated scope (optional)' },
-                identity_token: { type: 'string', description: 'HMAC-signed identity token from issue_identity_token CLI. Single-use. Binds persona creation to an authenticated human admin identity (Sprint 5, ADR-021).' },
+                identity_token: { type: 'string', description: 'HMAC-signed identity token from issue_identity_token CLI. Required. Single-use. Binds persona creation to an authenticated human admin identity (ADR-021).' },
             },
-            required: ['persona_id', 'issuing_entity', 'purpose', 'created_by', 'scope_definition', 'valid_until'],
+            required: ['persona_id', 'issuing_entity', 'purpose', 'created_by', 'scope_definition', 'valid_until', 'identity_token'],
         },
     },
     execute: (args, persona, sessionId) => executePersonaCreate({

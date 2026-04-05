@@ -131,6 +131,13 @@ async function _validatePersona(pool, personaId) {
             message: `Persona ${personaId} has expired (valid_until: ${persona.valid_until.toISOString()})`,
         };
     }
+    if (persona.governance_review_status !== 'approved') {
+        return {
+            valid: false,
+            reason: 'GOVERNANCE_REVIEW_REQUIRED',
+            message: `Persona ${personaId} is not approved for use (governance_review_status: ${persona.governance_review_status})`,
+        };
+    }
     return { valid: true, persona };
 }
 // ---------------------------------------------------------------------------

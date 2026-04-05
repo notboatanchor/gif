@@ -36,7 +36,7 @@ export type PersonaValidationResult = {
     reason: PersonaInvalidReason;
     message: string;
 };
-export type PersonaInvalidReason = 'NOT_FOUND' | 'NOT_ACTIVE' | 'EXPIRED' | 'NOT_YET_VALID' | 'DB_ERROR';
+export type PersonaInvalidReason = 'NOT_FOUND' | 'NOT_ACTIVE' | 'EXPIRED' | 'NOT_YET_VALID' | 'DB_ERROR' | 'GOVERNANCE_REVIEW_REQUIRED';
 export type IdentityBindingResult = {
     valid: true;
     assignmentId: string;

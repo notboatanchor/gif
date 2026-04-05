@@ -130,22 +130,22 @@ try {
       fail('db_read on audit_events creates an audit_read_log row', 'No row found in audit_read_log');
     }
 
-    // Test 2: db_read on non-audit table (personas) does NOT create a read_log row
+    // Test 2: db_read on non-audit table (tool_registry) does NOT create a read_log row
     const beforeRead2 = new Date().toISOString();
 
-    // Find a persona that can read 'personas' table
+    // Find a persona that can read 'tool_registry' table
     const personaReader = await gifPool.query(
       `SELECT persona_id FROM gif.personas
        WHERE status = 'active'
          AND scope_definition::jsonb -> 'permitted_actions' ? 'read'
-         AND scope_definition::jsonb -> 'permitted_sources' ? 'personas'
+         AND scope_definition::jsonb -> 'permitted_sources' ? 'tool_registry'
        LIMIT 1`
     );
 
     if (personaReader.rows.length > 0) {
       await callTool('db_read', {
         persona_id: personaReader.rows[0].persona_id,
-        table:      'personas',
+        table:      'tool_registry',
         limit:      3,
       });
 
@@ -154,19 +154,19 @@ try {
       const noLogCheck = await pgPool.query(
         `SELECT count(*) AS cnt FROM gif.audit_read_log
          WHERE reader_persona_id = $1
-           AND queried_table = 'personas'
+           AND queried_table = 'tool_registry'
            AND read_at >= $2::timestamptz`,
         [personaReader.rows[0].persona_id, beforeRead2]
       );
 
       if (parseInt(noLogCheck.rows[0].cnt) === 0) {
-        pass('db_read on non-audit table (personas) does NOT create an audit_read_log row');
+        pass('db_read on non-audit table (tool_registry) does NOT create an audit_read_log row');
       } else {
-        fail('db_read on non-audit table (personas) does NOT create an audit_read_log row',
+        fail('db_read on non-audit table (tool_registry) does NOT create an audit_read_log row',
           `Found ${noLogCheck.rows[0].cnt} unexpected row(s)`);
       }
     } else {
-      console.log('  ⚠ No persona with read+personas scope — skipping non-audit table test');
+      console.log('  ⚠ No persona with read+tool_registry scope — skipping non-audit table test');
     }
   }
 

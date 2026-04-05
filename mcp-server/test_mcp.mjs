@@ -49,7 +49,7 @@ const dbResult = await client.callTool({
   name: 'db_read',
   arguments: {
     persona_id: PERSONA_ID,
-    table:      'personas',
+    table:      'tool_registry',
     limit:      3,
   },
 });
