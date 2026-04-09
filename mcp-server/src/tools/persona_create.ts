@@ -175,7 +175,7 @@ export async function executePersonaCreate(
       const message = err instanceof Error ? err.message : 'Unknown error';
       return {
         content: [{ type: 'text', text: JSON.stringify({
-          error: `Failed to fetch parent persona: ${message}`,
+          error: 'Failed to fetch parent persona due to an internal error',
         }) }],
         isError: true,
       };
@@ -197,7 +197,7 @@ export async function executePersonaCreate(
       const message = err instanceof Error ? err.message : 'Unknown error';
       return {
         content: [{ type: 'text', text: JSON.stringify({
-          error: `Failed to determine delegation depth: ${message}`,
+          error: 'Failed to determine delegation depth due to an internal error',
         }) }],
         isError: true,
       };
@@ -352,7 +352,7 @@ export async function executePersonaCreate(
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error(`[persona_create] Transaction failed:`, message);
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: `Persona creation failed: ${message}` }) }],
+      content: [{ type: 'text', text: JSON.stringify({ error: 'Persona creation failed due to an internal error' }) }],
       isError: true,
     };
   }

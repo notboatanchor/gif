@@ -244,7 +244,7 @@ async function _validatePersona(
     return {
       valid:   false,
       reason:  'DB_ERROR',
-      message: `Database error during persona validation: ${message}`,
+      message: 'Internal error during persona validation',
     };
   }
 
@@ -507,7 +507,7 @@ async function _verifyIdentityBinding(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[gif-enforcement] verifyIdentityBinding DB error:', message);
-    return { valid: false, reason: `Database error during identity binding: ${message}` };
+    return { valid: false, reason: 'Internal error during identity binding' };
   }
 }
 

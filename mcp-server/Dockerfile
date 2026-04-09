@@ -20,6 +20,10 @@ COPY . .
 # Compile TypeScript to JavaScript
 RUN npm run build
 
+# Run as non-root user — the node:22-alpine image ships with a `node` user.
+# Prevents container-escape escalation if the MCP server process is compromised.
+USER node
+
 # Expose MCP server port (ADR-019)
 EXPOSE 3100
 
