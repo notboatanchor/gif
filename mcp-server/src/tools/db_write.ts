@@ -153,7 +153,7 @@ export async function executeDbWrite(
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error(`[db_write] Insert failed on table ${table}:`, message);
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: `Write failed: ${message}` }) }],
+      content: [{ type: 'text', text: JSON.stringify({ error: 'Write failed due to an internal error' }) }],
       isError: true,
     };
   }
