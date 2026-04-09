@@ -42,9 +42,11 @@ psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" \
 # ---------------------------------------------------------------------------
 
 echo "  2/3  Passwords"
-psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" <<SQL
-ALTER ROLE gif_admin PASSWORD '${GIF_ADMIN_PASSWORD}';
-ALTER ROLE gif_app   PASSWORD '${GIF_APP_PASSWORD}';
+psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" \
+    -v gif_admin_pw="$GIF_ADMIN_PASSWORD" \
+    -v gif_app_pw="$GIF_APP_PASSWORD" <<'SQL'
+ALTER ROLE gif_admin PASSWORD :'gif_admin_pw';
+ALTER ROLE gif_app   PASSWORD :'gif_app_pw';
 SQL
 
 # ---------------------------------------------------------------------------
