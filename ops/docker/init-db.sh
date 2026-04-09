@@ -8,9 +8,10 @@
 # Role passwords set in step 2 take effect for all subsequent connections.
 #
 # Steps:
-#   1. Bootstrap  — create gif_admin, gif_app roles and gif schema (superuser)
-#   2. Passwords  — set role passwords from environment variables (superuser)
-#   3. Migrations — run 001–012 as gif_admin (tracked; each applied once)
+#   1. Bootstrap   — create gif_admin, gif_app roles and gif schema (superuser)
+#   2. Passwords   — set role passwords from environment variables (superuser)
+#   3. Migrations  — run 001–012 as gif_admin (tracked; each applied once)
+#   4. Partitions  — ensure audit_events partitions exist for current + next 3 months
 #
 # Bootstrap detection: if gif.personas exists but gif.schema_migrations does
 # not, seeds schema_migrations with 001–011 as already applied before
@@ -32,7 +33,7 @@ echo ""
 # Step 1: Bootstrap — roles, gif schema (superuser)
 # ---------------------------------------------------------------------------
 
-echo "  1/3  Bootstrap"
+echo "  1/4  Bootstrap"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" \
     -f /schema/000_bootstrap.sql
 
@@ -41,7 +42,7 @@ psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" \
 # Passwords come from environment variables passed via docker-compose.yml.
 # ---------------------------------------------------------------------------
 
-echo "  2/3  Passwords"
+echo "  2/4  Passwords"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" \
     -v gif_admin_pw="$GIF_ADMIN_PASSWORD" \
     -v gif_app_pw="$GIF_APP_PASSWORD" <<'SQL'
@@ -58,7 +59,7 @@ SQL
 # Each migration is applied exactly once and recorded in schema_migrations.
 # ---------------------------------------------------------------------------
 
-echo "  3/3  Migrations"
+echo "  3/4  Migrations"
 
 # Helper: apply a single migration file and record it in schema_migrations.
 # Skips silently if already recorded.
@@ -132,6 +133,54 @@ apply_migration "010_combination_policies.sql"  /schema/010_combination_policies
 apply_migration "011_remove_research_pipeline_tables.sql" \
                                                 /schema/011_remove_research_pipeline_tables.sql
 apply_migration "012_schema_migrations.sql"     /schema/012_schema_migrations.sql
+
+# ---------------------------------------------------------------------------
+# Step 4: Audit partition management (as gif_admin)
+# Ensures audit_events partitions exist for the current month and the next 3
+# months. Runs on every container start — idempotent, safe to re-run.
+#
+# Why here and not in application code: partition creation is DDL and requires
+# gif_admin privileges. The MCP server runs as gif_app (no DDL access). This
+# init script already runs as a privileged user on every startup.
+#
+# Limitation: if the container runs continuously for months without a restart,
+# this step will not run. See docs/runbooks/adopter/production-deployment.md
+# for the monthly operator task that covers this case.
+# ---------------------------------------------------------------------------
+
+echo "  4/4  Partitions"
+psql -v ON_ERROR_STOP=1 -U gif_admin -d "$DB" <<'SQL'
+DO $$
+DECLARE
+    m      date;
+    tname  text;
+    lo     date;
+    hi     date;
+BEGIN
+    FOR i IN 0..3 LOOP
+        m     := date_trunc('month', now()) + (i || ' months')::interval;
+        tname := 'audit_events_' || to_char(m, 'YYYY_MM');
+        lo    := m;
+        hi    := m + '1 month'::interval;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'gif' AND c.relname = tname
+        ) THEN
+            EXECUTE format(
+                'CREATE TABLE gif.%I PARTITION OF gif.audit_events '
+                'FOR VALUES FROM (%L) TO (%L)',
+                tname, lo, hi
+            );
+            EXECUTE format('GRANT SELECT, INSERT ON gif.%I TO gif_app', tname);
+            EXECUTE format('REVOKE UPDATE ON gif.%I FROM gif_app', tname);
+            RAISE NOTICE 'Created partition: %', tname;
+        ELSE
+            RAISE NOTICE 'Partition already exists, skipping: %', tname;
+        END IF;
+    END LOOP;
+END$$;
+SQL
 
 echo ""
 echo "=== GIF Init Complete ==="

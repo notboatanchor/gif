@@ -141,7 +141,32 @@ Never grant `DELETE` or `TRUNCATE` to `gif_app` on audit-related tables. The aud
 
 ---
 
-## 7. Commit convention
+## 7. Audit partition management
+
+`audit_events` is a partitioned table — one partition per month. Partitions
+are not created by migrations; they are created by `init-db.sh` at container
+startup (current month + next 3 months) and by an operator cron task for
+long-running deployments.
+
+**As a contributor, you do not manage partitions directly.** But you should
+understand two things:
+
+1. **Do not add partition creation to migrations.** Partitions are time-based
+   and managed operationally. A migration that hard-codes a specific month's
+   partition will become stale and may conflict with the startup script.
+
+2. **If you extend the audit schema** (new columns on `audit_events`, new
+   indexes), test against the partitioned parent table — your changes apply
+   to all partitions automatically via inheritance. Check that grants are
+   correct on both the parent and any existing partitions in your test
+   environment.
+
+For full operator guidance on partition management, see
+`docs/runbooks/adopter/production-deployment.md`.
+
+---
+
+## 8. Commit convention
 
 Schema migrations use the `schema:` commit prefix:
 
