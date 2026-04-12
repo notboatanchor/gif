@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Audit Partition Retirement Script
--- Applies to: gif_research database
--- Run as: psql -U postgres -d gif_research -f gif/ops/retire_audit_partitions.sql
+-- Applies to: gif schema (database configured via PGDATABASE)
+-- Run as: gif_admin (via install.sh — do not run directly)
 --
 -- Purpose:
 --   Identify and optionally drop monthly audit_events partitions whose

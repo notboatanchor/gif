@@ -1,7 +1,7 @@
 -- =============================================================================
 -- GIF Core Schema — Migration 002
--- Applies to: gif_research database
--- Run as: psql -U postgres -d gif_research -f gif/schema/002_gif_core.sql
+-- Applies to: gif schema (database configured via PGDATABASE)
+-- Run as: gif_admin (via install.sh — do not run directly)
 --
 -- Sprint 3: Audit Trail Validation
 --

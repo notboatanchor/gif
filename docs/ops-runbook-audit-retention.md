@@ -1,7 +1,7 @@
 # Ops Runbook — Audit Retention and Erasure
 
 **Applies to:** gif database, audit_events partitioned table
-**Run as:** postgres (superuser) unless noted
+**Run as:** gif_admin unless noted
 **Related files:**
 - `gif/ops/retire_audit_partitions.sql` — retirement eligibility report and DROP template
 - `gif/schema/003_gif_erasure_log.sql` — erasure_log table definition
@@ -58,7 +58,7 @@ is not retirable until 2033-04-01.
 **Step 1 — Generate retirement report**
 
 ```bash
-psql -U postgres -d gif_research -f gif/ops/retire_audit_partitions.sql
+psql -U gif_admin -d $PGDATABASE -f gif/ops/retire_audit_partitions.sql
 ```
 
 Review the output. Note partitions with `retirement_status = RETIRABLE`.
@@ -74,7 +74,7 @@ If B2 export is not yet configured, skip this step and note it in the log.
 For each `RETIRABLE` partition, run individually:
 
 ```sql
--- Connect as postgres
+-- Connect as gif_admin
 DROP TABLE audit_events_YYYY_MM;
 ```
 
@@ -122,7 +122,7 @@ A data subject has submitted a verified erasure request. An external-user-id
 in the adopter's identity system maps to one or more GIF personas, and the
 request requires deletion of all associated audit records.
 
-This procedure must be run as `postgres`, not `gif_app`. The `gif_app` role
+This procedure must be run as `gif_admin`, not `gif_app`. The `gif_app` role
 cannot DELETE from audit tables by design (INSERT-only RLS). This is intentional:
 right-to-erasure is an operator-mediated administrative action, not an
 application-layer operation.
@@ -154,7 +154,7 @@ persona_ids are correct before proceeding.
 **Step 3 — Record erasure intent in erasure_log before deleting**
 
 ```sql
--- Run as postgres
+-- Run as gif_admin
 INSERT INTO erasure_log (
     operator,
     persona_ids,
@@ -177,7 +177,7 @@ INSERT INTO erasure_log (
 **Step 4 — Delete audit records**
 
 ```sql
--- Run as postgres (gif_app cannot DELETE — by design)
+-- Run as gif_admin (gif_app cannot DELETE — by design)
 DELETE FROM audit_events
 WHERE persona_id = ANY(ARRAY['<uuid1>', '<uuid2>']::UUID[]);
 ```

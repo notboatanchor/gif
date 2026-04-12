@@ -85,8 +85,10 @@ echo "Super:    $POSTGRES_USER"
 echo ""
 
 # Step 1: Bootstrap — create roles and schemas (as superuser)
+# -v gif_dedicated_db=on: dedicated database path — gif_admin owns the database.
+# Omit this flag when installing into an existing database (see GIF-016).
 echo "Step 1/3  Bootstrap (roles, schemas)"
-run_as_super < "$ROOT/gif/schema/000_bootstrap.sql"
+run_as_super -v gif_dedicated_db=on < "$ROOT/gif/schema/000_bootstrap.sql"
 
 # Step 2: Set role passwords (as superuser, no passwords in SQL files)
 echo "Step 2/3  Set role passwords"

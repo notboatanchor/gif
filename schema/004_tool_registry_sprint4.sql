@@ -3,8 +3,8 @@
 -- Tool registry: activate Phase 1 tools, register framework tools,
 -- add tool_layer column to distinguish GIF framework tools from adopter tools.
 --
--- Applies to: gif_research database
--- Run as: psql -U postgres -d gif_research -f gif/schema/004_tool_registry_sprint4.sql
+-- Applies to: gif schema (database configured via PGDATABASE)
+-- Run as: gif_admin (via install.sh — do not run directly)
 --
 -- Context:
 --   tool_registry was seeded in 001_gif_core.sql with Phase 1 adopter tools

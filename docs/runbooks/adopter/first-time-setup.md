@@ -241,3 +241,90 @@ PGPASSWORD=<GIF_APP_PASSWORD> psql \
 You should see a row for the tool call you just made. The audit trail is
 INSERT-only at the database permission level — `gif_app` cannot UPDATE or DELETE
 these rows.
+
+---
+
+## Installing into an existing database
+
+The steps above use Docker to create a fresh database named `gif`. If you are
+installing GIF into an existing PostgreSQL database that already has an owner and
+other schemas, follow this path instead.
+
+**When to use this path:**
+- Your application already has a PostgreSQL database and you want to add GIF
+  governance alongside your existing schemas.
+- You are installing GIF on a managed service (RDS, Cloud SQL, Supabase) where
+  you do not create a dedicated GIF database.
+
+**Prerequisites**
+
+1. The database must exist. GIF does not create databases — only schemas within them.
+
+2. Run the following as the database superuser or database owner before executing
+   the bootstrap. This gives `gif_admin` the right to create the `gif` schema:
+
+   ```sql
+   CREATE ROLE gif_admin WITH LOGIN PASSWORD '<gif_admin_password>';
+   CREATE ROLE gif_app   WITH LOGIN PASSWORD '<gif_app_password>';
+   GRANT CREATE ON DATABASE <your_database> TO gif_admin;
+   ```
+
+   If `gif_admin` and `gif_app` already exist on this Postgres instance (e.g.,
+   GIF is already installed in another database on the same server), skip the
+   `CREATE ROLE` lines.
+
+**Run bootstrap (existing database path)**
+
+Omit `-v gif_dedicated_db=on`. This skips the database ownership transfer —
+`gif_admin` owns only the `gif` schema.
+
+```bash
+PGPASSWORD=<superuser_password> psql \
+  -h <host> -p <port> -U <superuser> -d <your_database> \
+  -v ON_ERROR_STOP=1 \
+  -f gif/schema/000_bootstrap.sql
+```
+
+**Set role passwords**
+
+```sql
+ALTER ROLE gif_admin PASSWORD '<gif_admin_password>';
+ALTER ROLE gif_app   PASSWORD '<gif_app_password>';
+```
+
+**Run GIF schema migrations**
+
+Run each migration in order as `gif_admin`:
+
+```bash
+for f in gif/schema/001_gif_core.sql \
+          gif/schema/002_gif_core.sql \
+          gif/schema/003_gif_erasure_log.sql \
+          gif/schema/004_tool_registry_sprint4.sql \
+          gif/schema/005_schema_separation.sql \
+          gif/schema/006_audit_hash_chain.sql \
+          gif/schema/007_identity_binding.sql \
+          gif/schema/008_audit_read_log.sql \
+          gif/schema/009_retention_lifecycle.sql \
+          gif/schema/010_combination_policies.sql; do
+  PGPASSWORD=<gif_admin_password> psql \
+    -h <host> -p <port> -U gif_admin -d <your_database> \
+    -v ON_ERROR_STOP=1 -f "$f"
+done
+```
+
+**Verify**
+
+```sql
+SELECT migration_name, applied_at
+FROM gif.schema_migrations
+ORDER BY applied_at;
+```
+
+You should see 12 rows. The `gif` schema now coexists with your existing schemas.
+Your existing schemas and their owners are unaffected.
+
+**Configure your MCP server**
+
+Set `PGDATABASE=<your_database>` in your MCP server environment. The `gif` schema
+name is fixed (GIF-016) — the database name is your choice.

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- GIF Core Schema — Migration 003
--- Applies to: gif_research database
--- Run as: psql -U postgres -d gif_research -f gif/schema/003_gif_erasure_log.sql
+-- Applies to: gif schema (database configured via PGDATABASE)
+-- Run as: gif_admin (via install.sh — do not run directly)
 --
 -- Sprint 3 (late addition): Erasure log table stub
 --

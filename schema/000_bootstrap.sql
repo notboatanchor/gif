@@ -1,21 +1,28 @@
 -- =============================================================================
 -- GIF Schema — Bootstrap
--- Run as: psql -U <superuser> -d gif -f gif/schema/000_bootstrap.sql
+-- Run as: psql -U <superuser> -d <database> -f gif/schema/000_bootstrap.sql
 --
 -- This is the ONLY script that requires superuser access.
 -- All subsequent migrations (001 through latest) run as gif_admin.
 --
--- Prerequisites (Docker):
---   POSTGRES_DB=gif in .env — Docker creates the gif database automatically.
---   Run this script in the gif database as the Docker superuser.
+-- TWO INSTALL PATHS (GIF-016):
 --
--- Prerequisites (bare metal / managed service):
---   CREATE DATABASE gif;  (or pass the target database name via psql -d)
---   Then run this script as the Postgres superuser / CREATEROLE-privileged user.
+--   Dedicated database (new database created for GIF):
+--     Pass -v gif_dedicated_db=on to transfer database ownership to gif_admin.
+--     install.sh does this automatically.
+--
+--       psql -U postgres -d gif -v gif_dedicated_db=on -f 000_bootstrap.sql
+--
+--   Existing database (installing GIF alongside other schemas):
+--     Omit the flag. Database ownership is not transferred.
+--     Prerequisite: the database superuser must first run:
+--       GRANT CREATE ON DATABASE <your_database> TO gif_admin;
+--
+--       psql -U postgres -d <your_database> -f 000_bootstrap.sql
 --
 -- What this script does:
 --   1. Creates gif_admin and gif_app roles (no passwords — set by install script)
---   2. Transfers gif database ownership to gif_admin
+--   2. Transfers database ownership to gif_admin (dedicated path only)
 --   3. Creates gif schema owned by gif_admin
 --   4. Sets search_path for each role
 --   5. Grants CONNECT and schema USAGE to gif_app
@@ -26,13 +33,20 @@
 --     CREATE ROLE myapp_user WITH LOGIN PASSWORD '...';
 --     GRANT gif_app TO myapp_user;
 --
--- Adopter layers (Research Pipeline, FederalGraph) run their own bootstrap
--- scripts that create their application roles and schemas, then grant access
--- to gif schema tables as needed.
+-- Adopter layers run their own bootstrap scripts that create their application
+-- roles and schemas, then grant access to gif schema tables as needed.
 --
 -- ADR-028: Database schema separation and account model
 -- ADR-032: GIF ownership model and deployment topology
+-- GIF-016: Bootstrap install paths
 -- =============================================================================
+
+-- Default gif_dedicated_db to off if not passed by the caller.
+-- install.sh passes -v gif_dedicated_db=on for the dedicated database path.
+\if :{?gif_dedicated_db}
+\else
+  \set gif_dedicated_db off
+\endif
 
 -- ---------------------------------------------------------------------------
 -- Roles
@@ -64,15 +78,27 @@ COMMENT ON ROLE gif_app IS
     'Adopter layer users (research_app, etc.) are created by their own bootstrap scripts.';
 
 -- ---------------------------------------------------------------------------
--- Database ownership
+-- Database ownership (dedicated database path only)
 --
--- gif_admin owns the database so it can create schemas and manage DDL
--- without requiring superuser for subsequent operations.
+-- Dedicated path: gif_admin owns the database, giving it schema-creation
+-- rights without requiring superuser for subsequent operations.
+--
+-- Existing database path: skipped. gif_admin owns only the gif schema.
+-- Prerequisite: GRANT CREATE ON DATABASE <dbname> TO gif_admin must have
+-- been run by the database superuser before executing this script.
 -- ---------------------------------------------------------------------------
 
+\if :gif_dedicated_db
 DO $$ BEGIN
     EXECUTE format('ALTER DATABASE %I OWNER TO gif_admin', current_database());
+    RAISE NOTICE 'Dedicated database path: ownership transferred to gif_admin';
 END $$;
+\else
+DO $$ BEGIN
+    RAISE NOTICE 'Existing database path: skipping ownership transfer.';
+    RAISE NOTICE 'Prerequisite: gif_admin must have CREATE privilege on this database (GRANT CREATE ON DATABASE ... TO gif_admin).';
+END $$;
+\endif
 
 -- ---------------------------------------------------------------------------
 -- Schemas
