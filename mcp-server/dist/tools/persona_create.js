@@ -131,7 +131,7 @@ async function executePersonaCreate(args, persona, sessionId) {
             const message = err instanceof Error ? err.message : 'Unknown error';
             return {
                 content: [{ type: 'text', text: JSON.stringify({
-                            error: `Failed to fetch parent persona: ${message}`,
+                            error: 'Failed to fetch parent persona due to an internal error',
                         }) }],
                 isError: true,
             };
@@ -150,7 +150,7 @@ async function executePersonaCreate(args, persona, sessionId) {
             const message = err instanceof Error ? err.message : 'Unknown error';
             return {
                 content: [{ type: 'text', text: JSON.stringify({
-                            error: `Failed to determine delegation depth: ${message}`,
+                            error: 'Failed to determine delegation depth due to an internal error',
                         }) }],
                 isError: true,
             };
@@ -208,6 +208,14 @@ async function executePersonaCreate(args, persona, sessionId) {
     // Rejection here does not create a persona or a scope violation record —
     // it is an authentication failure, not an authorization failure.
     // ---------------------------------------------------------------------------
+    if (!args.identity_token) {
+        return {
+            content: [{ type: 'text', text: JSON.stringify({
+                        error: 'identity_token is required',
+                    }) }],
+            isError: true,
+        };
+    }
     const binding = await (0, persona_js_1.verifyIdentityBinding)({ identityToken: args.identity_token });
     if (!binding.valid) {
         return {
@@ -269,7 +277,7 @@ async function executePersonaCreate(args, persona, sessionId) {
                         valid_until: args.valid_until,
                         parent_persona_id: args.parent_persona_id ?? null,
                         delegation_depth: args.parent_persona_id ? delegationDepth : null,
-                        identity_assignment_id: identityAssignmentId ?? null,
+                        identity_assignment_id: identityAssignmentId,
                         created: true,
                     }) }],
         };
@@ -279,7 +287,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona_create] Transaction failed:`, message);
         return {
-            content: [{ type: 'text', text: JSON.stringify({ error: `Persona creation failed: ${message}` }) }],
+            content: [{ type: 'text', text: JSON.stringify({ error: 'Persona creation failed due to an internal error' }) }],
             isError: true,
         };
     }

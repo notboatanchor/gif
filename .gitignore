@@ -1,5 +1,7 @@
 # Node.js build output
-mcp-server/dist/
+# dist/ is tracked — adopters consume gif-enforcement as a git dependency
+# (git+ssh://...#v<tag>) and import from dist/ per package.json exports.
+# Rebuild (npm run build) and commit before tagging a release.
 mcp-server/node_modules/
 
 # Environment

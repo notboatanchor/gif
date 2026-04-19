@@ -154,7 +154,7 @@ async function executeDbRead(args, persona, sessionId) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[db_read] Query failed on table ${table}:`, message);
         return {
-            content: [{ type: 'text', text: JSON.stringify({ error: `Query failed: ${message}` }) }],
+            content: [{ type: 'text', text: JSON.stringify({ error: 'Query failed due to an internal error' }) }],
             isError: true,
         };
     }

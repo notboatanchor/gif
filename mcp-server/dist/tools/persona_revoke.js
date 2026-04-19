@@ -77,7 +77,7 @@ async function executePersonaRevoke(args, persona, sessionId) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona_revoke] Failed to fetch target persona:`, message);
         return {
-            content: [{ type: 'text', text: JSON.stringify({ error: `Revocation failed: ${message}` }) }],
+            content: [{ type: 'text', text: JSON.stringify({ error: 'Revocation failed due to an internal error' }) }],
             isError: true,
         };
     }
@@ -126,7 +126,7 @@ async function executePersonaRevoke(args, persona, sessionId) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona_revoke] Transaction failed:`, message);
         return {
-            content: [{ type: 'text', text: JSON.stringify({ error: `Revocation failed: ${message}` }) }],
+            content: [{ type: 'text', text: JSON.stringify({ error: 'Revocation failed due to an internal error' }) }],
             isError: true,
         };
     }
