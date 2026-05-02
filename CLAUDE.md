@@ -122,3 +122,27 @@ Contributors using Claude Code get them automatically.
 - `fix:` corrections
 - `schema:` database schema changes
 - `docs:` documentation only
+
+**Documentation**
+- Every document should stand alone — a reader should never need to go outside
+  it to resolve a question the document itself raises.
+- If implementation details are out of scope, say so explicitly and point to
+  where they live. Vague references ("register your tools") without a pointer
+  are not acceptable.
+- When writing docs, ask: does this answer every question it implicitly raises?
+
+---
+
+## Maintaining This File
+
+CLAUDE.md is public contributor context — it ships with the repository and is
+read by contributors and Claude Code sessions on any machine.
+
+Keep it lean:
+- **Include:** non-negotiables, locked architecture decisions, roadmap items,
+  skills inventory, code style rules.
+- **Exclude:** current sprint state, migration tables, session logs, internal
+  strategic context, anything that describes "where we are right now" rather
+  than "how this project works."
+
+Current session state belongs in `project-state.md`, which is gitignored.
