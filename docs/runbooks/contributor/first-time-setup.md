@@ -15,7 +15,11 @@ Get the full gif stack running locally so you can build and test against a real 
 ## 1. Clone the repository
 
 ```bash
-git clone git@github.com:notboatanchor/gif.git
+# HTTPS (no SSH key required):
+git clone https://github.com/notboatanchor/gif.git
+# Or SSH:
+# git clone git@github.com:notboatanchor/gif.git
+
 cd gif
 ```
 

@@ -73,7 +73,11 @@ See [`docs/gif-101.md`](docs/gif-101.md) for a technical walkthrough of the code
 **Prerequisites:** Docker Engine 24+, Docker Compose v2, Git.
 
 ```bash
-git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
+# HTTPS (no SSH key required):
+git clone --branch v0.1.0 https://github.com/notboatanchor/gif.git
+# Or SSH:
+# git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
+
 cd gif
 cp .env.example .env   # fill in passwords and secrets
 docker compose up -d --build

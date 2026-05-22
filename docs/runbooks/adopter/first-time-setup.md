@@ -21,7 +21,11 @@ Clone at a tagged release. Always pin to a tag — never run from a floating bra
 in any environment that handles real audit data.
 
 ```bash
-git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
+# HTTPS (no SSH key required):
+git clone --branch v0.1.0 https://github.com/notboatanchor/gif.git
+# Or SSH:
+# git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
+
 cd gif
 ```
 
