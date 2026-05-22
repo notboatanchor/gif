@@ -94,11 +94,14 @@ Contributors using Claude Code get them automatically.
 |-------|---------|
 | `gif-eval` | Eval-Driven Development for MCP tools — define pass/fail before implementing |
 | `tdd-workflow` | TDD cycle (RED/GREEN/REFACTOR) for MCP tools and service functions |
-| `verification-loop` | Build/type/lint/test verification before committing |
 | `backend-patterns` | Node.js/TypeScript service layer patterns |
 | `database-migrations` | Safe migration patterns for gif's schema layer |
 | `mcp-server-patterns` | Canonical MCP patterns for gif's tool interface |
 | `postgres-patterns` | PostgreSQL patterns for gif's persistence layer |
+
+Build/type/lint/test verification before committing is handled by the global
+`verification-loop` skill in Claude Code, which detects gif's stack and runs
+the canonical sequence automatically — no project-local copy needed.
 
 ---
 

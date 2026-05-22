@@ -49,7 +49,7 @@ Invokes `/gif-eval`.
 - `CONTRIBUTING.md` setup steps produce a working dev environment from a clean clone (dry-run plan initially; full run in CI later)
 
 ### Phase 6 — Security
-- `/security-review` clean at high severity (medium allowed with documented acceptance)
+- `/security-audit` clean at high severity (medium allowed with documented acceptance)
 - `npm audit --production` no high/critical
 - No `.env` or secrets in tracked files (gitleaks or ripgrep scan for common patterns)
 
