@@ -218,12 +218,141 @@ management for those tools is the adopter's operational concern.
 
 ---
 
-## 7. Smoke test
+## 9. Bootstrap the first persona
 
-With gif running, verify the core path end-to-end.
+A fresh GIF installation has zero personas and zero user-persona assignments.
+This means `persona_create` cannot be the first call into a new deployment —
+it has three preconditions that the schema migrations do not seed for you:
 
-**Create a persona** via the MCP `persona_create` tool. Every persona requires a
-non-nullable `purpose` field — this is a schema constraint, not policy.
+1. **An issuing persona** with `manage_personas` in `permitted_actions` must
+   already exist. `persona_create` requires `persona_id` to point at an active,
+   approved persona that holds this permission.
+2. **A `user_persona_assignments` row** binding an external user identity to
+   the issuing persona must exist. `persona_create` requires `identity_token`,
+   and `identity_token` is HMAC-derived from an `assignment_id` that must
+   reference a real row.
+3. **An unconsumed HMAC token** issued from that assignment. Tokens are
+   single-use: each `user_persona_assignments` row yields exactly one
+   `persona_create` call. `gif_app` cannot un-consume a token — the
+   `upa_consume_token_gif_app` policy only allows `token_consumed: false→true`.
+
+The bootstrap therefore requires a one-time direct-SQL seed as `gif_admin`,
+bypassing the HMAC flow that `gif_app` is constrained by. Every subsequent
+persona is created through `persona_create` with a fresh token.
+
+**Step 1 — Seed the bootstrap admin persona** (direct SQL as `gif_admin`):
+
+```bash
+PGPASSWORD=<GIF_ADMIN_PASSWORD> psql \
+  -h localhost -p 5432 -U gif_admin -d gif <<'SQL'
+INSERT INTO gif.personas (
+    issuing_entity,
+    purpose,
+    created_by,
+    scope_definition,
+    valid_until,
+    status,
+    max_delegation_depth,
+    governance_review_status
+) VALUES (
+    '<adopter-name>',
+    'Bootstrap admin — provisions operational personas',
+    '<adopter-name>-bootstrap',
+    '{
+       "permitted_actions":  ["manage_personas"],
+       "permitted_sources":  ["tool_registry"],
+       "output_destinations": ["user_persona_assignments"],
+       "max_results": 100
+    }'::jsonb,
+    now() + interval '10 years',
+    'active',
+    1,
+    'approved'
+)
+RETURNING persona_id;
+SQL
+```
+
+Capture the returned `persona_id` — call it `<BOOTSTRAP_ADMIN_PERSONA_ID>`.
+
+The `scope_definition` above is intentionally minimal. The bootstrap admin
+exists for one job: create the personas your application actually uses. It
+should not carry read/write scope to application data.
+
+**Step 2 — Create an assignment row for every persona you intend to provision**:
+
+Each `persona_create` call consumes one assignment row's token. If you plan to
+provision N personas at bootstrap (e.g., one read-only persona, one
+read+write persona, one audit-reader persona), seed N assignment rows now.
+
+```bash
+PGPASSWORD=<GIF_ADMIN_PASSWORD> psql \
+  -h localhost -p 5432 -U gif_admin -d gif <<'SQL'
+INSERT INTO gif.user_persona_assignments (
+    external_user_id,
+    persona_id,
+    assigned_by,
+    purpose_for_assignment
+) VALUES
+    ('<admin-external-user-id>', '<BOOTSTRAP_ADMIN_PERSONA_ID>',
+     '<adopter-name>-bootstrap', 'Provision read-only persona'),
+    ('<admin-external-user-id>', '<BOOTSTRAP_ADMIN_PERSONA_ID>',
+     '<adopter-name>-bootstrap', 'Provision read+write persona'),
+    ('<admin-external-user-id>', '<BOOTSTRAP_ADMIN_PERSONA_ID>',
+     '<adopter-name>-bootstrap', 'Provision audit-reader persona')
+RETURNING assignment_id, purpose_for_assignment;
+SQL
+```
+
+`external_user_id` is opaque to GIF — it is your reference to whichever
+identity system your application uses (IdP subject, directory ID, internal
+user UUID). GIF stores it without interpreting it. See ADR-021 for the
+identity binding model.
+
+Capture the returned `assignment_id` values.
+
+**Step 3 — Mint an HMAC token from each assignment**:
+
+```bash
+cd mcp-server
+npx ts-node src/cli/issue_identity_token.ts \
+  --assignment-id <ASSIGNMENT_ID_FROM_STEP_2>
+```
+
+The CLI prints a single token to stdout. Tokens are valid for 15 minutes from
+issuance. `IDENTITY_HMAC_SECRET` must be set in the environment (source your
+`.env` or export it directly).
+
+**Step 4 — Call `persona_create` with the issuing persona and the token**:
+
+For each persona you want to provision, call the MCP `persona_create` tool with:
+
+- `persona_id`: `<BOOTSTRAP_ADMIN_PERSONA_ID>` (the issuer with `manage_personas`)
+- `identity_token`: the token from Step 3
+- `purpose`, `issuing_entity`, `scope_definition`, `valid_until`,
+  `max_delegation_depth`: the new persona's own definition (see the
+  `persona_create` tool schema or `mcp-server/src/tools/persona_create.ts`).
+
+Each `persona_create` call:
+- consumes one assignment row's token (flips `token_consumed: false→true`)
+- creates one new persona
+- records an audit event with `human_actor_id = <assignment_id>` — linking
+  the new persona back to the verified human identity that authorized it
+
+**Step 5 — Ongoing provisioning** (after bootstrap):
+
+To create additional personas later, repeat Steps 2–4 against the bootstrap
+admin (or any persona you've created with `manage_personas` in its scope).
+Direct-SQL inserts as `gif_admin` are the bootstrap exception — they are not
+the steady-state provisioning path. After the first persona exists, all
+provisioning goes through `persona_create`.
+
+---
+
+## 10. Smoke test
+
+With gif running and the first persona provisioned, verify the core path
+end-to-end.
 
 **Execute a tool call** through your adopter server with the new persona ID.
 

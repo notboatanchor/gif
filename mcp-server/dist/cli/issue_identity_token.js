@@ -62,7 +62,9 @@ const argv = process.argv.slice(2);
 const assignmentIdIndex = argv.indexOf('--assignment-id');
 if (assignmentIdIndex === -1 || !argv[assignmentIdIndex + 1]) {
     process.stderr.write('Usage: npx ts-node src/cli/issue_identity_token.ts --assignment-id <UUID>\n\n' +
-        'The UUID must match an active, unconsumed row in gif.user_persona_assignments.\n');
+        'The UUID must match an active, unconsumed row in gif.user_persona_assignments.\n' +
+        'For first-time setup (no assignments exist yet), see\n' +
+        '  docs/runbooks/adopter/first-time-setup.md#9-bootstrap-the-first-persona\n');
     process.exit(1);
 }
 const assignmentId = argv[assignmentIdIndex + 1];
