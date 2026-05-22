@@ -99,6 +99,7 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 | [`docs/gif-product-overview.md`](docs/gif-product-overview.md) | Architects, evaluators | Full technical overview, regulatory alignment, roadmap |
 | [`docs/gif-101.md`](docs/gif-101.md) | Contributors, integrators | Codebase walkthrough, execution flow, schema |
 | [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md) | All technical | Request flow, schema ER, persona lifecycle, delegation |
+| [`docs/secrets.md`](docs/secrets.md) | Operators, adopters | Env-var contract, vault reference patterns, rotation procedures |
 | [`docs/runbooks/contributor/`](docs/runbooks/contributor/) | Contributors | First-time setup, schema migrations |
 | [`docs/runbooks/adopter/`](docs/runbooks/adopter/) | Adopters | First-time setup, upgrade path |
 

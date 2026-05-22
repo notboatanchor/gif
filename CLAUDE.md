@@ -50,8 +50,9 @@ tool responses or interrupt tool execution.
 `git+ssh://git@github.com/scottrhodes/gif.git#v0.1.0`. Version bumps require a
 tag in this repo and a dependency update in all adopter repos.
 
-**No secrets in repository.** `.env` is gitignored. Credentials in the password
-manager and `.env` only.
+**No secrets in repository.** `.env` is gitignored. Secrets are injected via
+environment variables at process startup per GIF-017; the contract and rotation
+procedures are in `docs/secrets.md`.
 
 **`identity_token` is mandatory at `persona_create`.** Every persona must have a
 verified human identity on record at provisioning time. `identity_token` is
