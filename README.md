@@ -111,6 +111,6 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-AGPL v3. See [`LICENSE`](LICENSE).
+Apache License, Version 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
-Copyright 2024 Scott Rhodes.
+Copyright 2026 Notboatanchor Labs LLC.

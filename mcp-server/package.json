@@ -2,6 +2,7 @@
   "name": "gif-enforcement",
   "version": "0.1.0",
   "description": "GIF MCP server — AI tool interface and persona enforcement layer",
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "exports": {
     ".": {

@@ -2,6 +2,7 @@
   "name": "gif-enforcement",
   "version": "0.1.0",
   "description": "GIF enforcement package — persona-based permissions and audit trail for AI tool interfaces",
+  "license": "Apache-2.0",
   "main": "mcp-server/dist/index.js",
   "exports": {
     ".": {
