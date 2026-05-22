@@ -104,18 +104,17 @@ npm run build
 
 ## 6. Run the test suite
 
-Tests connect directly to the postgres container. Source `.env` first to load credentials, then set the host variables:
+Use the helper script — it sources `.env`, sets the host variables, and runs `npm test`:
 
 ```bash
-cd mcp-server
-source ../.env
-PGHOST=localhost PGPORT=$PGPORT_HOST \
-PGPASSWORD=$GIF_APP_PASSWORD PGADMINPASSWORD=$GIF_ADMIN_PASSWORD \
-IDENTITY_HMAC_SECRET=$IDENTITY_HMAC_SECRET \
-npm test
+./scripts/test-local.sh
 ```
 
-`npm test` runs all test files in sequence: `test_setup`, `test_mcp`, `test_audit_trail`, `test_delegation`, `test_hash_chain`, `test_identity_binding`, `test_read_log`, and `test_retention`.
+`npm test` runs all test files in sequence: `test_setup`, `test_mcp`, `test_audit_trail`, `test_delegation`, `test_hash_chain`, `test_identity_binding`, `test_read_log`, `test_retention`, and `test_combination_policies`.
+
+### Port conflicts
+
+If port 3100 is already in use on your machine (e.g., another gif deployment is running), set `PORT` in `.env` to a free port — for example, `PORT=3199`. The helper script reads `PORT` from `.env` and constructs `MCP_BASE_URL` automatically, so tests connect to the right server. Apply the same approach for `PGPORT_HOST` if port 5432 is taken.
 
 ---
 

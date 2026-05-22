@@ -29,9 +29,11 @@ Before contributing code, read [`docs/gif-101.md`](docs/gif-101.md) — it expla
 **Submitting a pull request:**
 1. Fork the repo and create a branch from `main`
 2. Make your changes
-3. Run the full test suite — `npm test` from `mcp-server/` — and confirm all 48 tests pass
+3. Run the full test suite locally — `./scripts/test-local.sh` from the repo root — and confirm everything passes
 4. Follow the commit conventions: `feat:`, `fix:`, `chore:`, `schema:`, `docs:`
 5. Open a PR with a description of what changed and why
+
+Every PR is checked automatically by CI (GitHub Actions). The workflow runs type checking, lint, build, `npm audit --production`, and the full integration test suite against a fresh docker compose stack. A green CI run is the bar for review.
 
 PRs that touch the enforcement path, audit tables, or persona lifecycle require extra scrutiny. The non-negotiables in [`CLAUDE.md`](CLAUDE.md) define what cannot change without an architecture decision record.
 

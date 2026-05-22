@@ -1,0 +1,134 @@
+# =============================================================================
+# gif — Continuous Integration
+#
+# Runs on every pull request and on every push to main:
+#   - fast-checks:  typecheck, lint, build, npm audit (production dependencies)
+#   - integration: full test suite against a fresh docker compose stack
+#
+# fast-checks fails the PR on any obvious source-level issue without spending
+# time on the integration tests. integration runs in parallel.
+# =============================================================================
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+
+  fast-checks:
+    name: Fast checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: npm audit (production)
+        run: npm audit --omit=dev --audit-level=high
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build
+        working-directory: mcp-server
+        run: npm run build
+
+      - name: Create .env from .env.example
+        run: |
+          cp .env.example .env
+          # Substitute real (random) values for CI. None of these leave the runner.
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+            echo "GIF_ADMIN_PASSWORD=$(openssl rand -hex 16)"
+            echo "GIF_APP_PASSWORD=$(openssl rand -hex 16)"
+            echo "IDENTITY_HMAC_SECRET=$(openssl rand -hex 32)"
+            echo "PGDATABASE=gif"
+            echo "PGPORT_HOST=5432"
+            echo "PORT=3100"
+          } > .env
+
+      - name: Start docker compose stack
+        run: docker compose up -d --build
+
+      - name: Wait for postgres init to complete
+        run: |
+          # init-db.sh applies all migrations on first start; tail logs until
+          # the success line appears or we hit a 60s timeout.
+          for i in $(seq 1 60); do
+            if docker compose logs postgres 2>&1 | grep -q "GIF Init Complete"; then
+              echo "postgres init complete"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "postgres did not finish init within 60s"
+          docker compose logs postgres
+          exit 1
+
+      - name: Wait for mcp-server to accept connections
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null -w '%{http_code}' http://localhost:3100/mcp 2>&1 | grep -qE '^(2|4)'; then
+              echo "mcp-server is reachable"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "mcp-server not reachable within 30s"
+          docker compose logs mcp-server
+          exit 1
+
+      - name: Run integration tests
+        run: ./scripts/test-local.sh
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "=== postgres logs ==="
+          docker compose logs postgres
+          echo "=== mcp-server logs ==="
+          docker compose logs mcp-server
+
+      - name: Tear down docker compose stack
+        if: always()
+        run: docker compose down -v

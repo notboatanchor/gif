@@ -189,7 +189,8 @@ try {
 
 console.log('\n[sprint3] Test 3: blocked_at correctness (enforcement layer name)');
 
-const transport = new StreamableHTTPClientTransport(new URL('http://localhost:3100/mcp'));
+const MCP_URL = process.env.MCP_BASE_URL || 'http://localhost:3100';
+const transport = new StreamableHTTPClientTransport(new URL(`${MCP_URL}/mcp`));
 const mcp = new McpClient({ name: 'sprint3-test', version: '0.1.0' }, { capabilities: {} });
 await mcp.connect(transport);
 

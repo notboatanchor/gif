@@ -49,7 +49,7 @@ function issueToken(assignmentId, secret) {
 }
 
 const { Pool } = pg;
-const SERVER_URL = 'http://localhost:3100';
+const SERVER_URL = process.env.MCP_BASE_URL || 'http://localhost:3100';
 
 // ---------------------------------------------------------------------------
 // Helpers

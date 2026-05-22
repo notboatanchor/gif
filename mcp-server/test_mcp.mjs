@@ -53,7 +53,8 @@ if (row.rows.length === 0) {
 const PERSONA_ID = row.rows[0].persona_id;
 console.log(`[test_mcp] Using persona: ${PERSONA_ID}`);
 
-const transport = new StreamableHTTPClientTransport(new URL('http://localhost:3100/mcp'));
+const MCP_URL = process.env.MCP_BASE_URL || 'http://localhost:3100';
+const transport = new StreamableHTTPClientTransport(new URL(`${MCP_URL}/mcp`));
 const client = new Client({ name: 'test-client', version: '0.1.0' }, { capabilities: {} });
 
 await client.connect(transport);

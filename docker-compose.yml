@@ -46,7 +46,9 @@ services:
       PGDATABASE:           ${PGDATABASE:-gif}
       PGUSER:               gif_app
       PGPASSWORD:           ${GIF_APP_PASSWORD}
-      PORT:                 ${PORT:-3100}
+      # PORT is intentionally NOT passed through. The container always listens
+      # on the default 3100 internally; the host-side mapping below selects
+      # which port on your machine reaches it.
       IDENTITY_HMAC_SECRET: ${IDENTITY_HMAC_SECRET}
     ports:
       - "${PORT:-3100}:3100"
