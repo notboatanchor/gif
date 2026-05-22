@@ -142,8 +142,7 @@ async function executePersonaCreate(args, persona, sessionId) {
             }
             parentPersona = parentResult.rows[0];
         }
-        catch (err) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
+        catch {
             return {
                 content: [{ type: 'text', text: JSON.stringify({
                             error: 'Failed to fetch parent persona due to an internal error',
@@ -161,8 +160,7 @@ async function executePersonaCreate(args, persona, sessionId) {
             parentDepth = depthResult.rows.length > 0 ? depthResult.rows[0].delegation_depth : 0;
             delegationDepth = parentDepth + 1;
         }
-        catch (err) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
+        catch {
             return {
                 content: [{ type: 'text', text: JSON.stringify({
                             error: 'Failed to determine delegation depth due to an internal error',
