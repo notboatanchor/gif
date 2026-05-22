@@ -5,7 +5,7 @@
 
 ## Decision
 
-Adopters declare gif-enforcement as a tag-pinned SSH git dependency: `git+ssh://git@github.com/scottrhodes/gif.git#vX.Y.Z`. No floating branch dependencies. No `file:` references.
+Adopters declare gif-enforcement as a tag-pinned SSH git dependency: `git+ssh://git@github.com/notboatanchor/gif.git#vX.Y.Z`. No floating branch dependencies. No `file:` references.
 
 ## Context
 

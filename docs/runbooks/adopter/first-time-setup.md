@@ -21,7 +21,7 @@ Clone at a tagged release. Always pin to a tag — never run from a floating bra
 in any environment that handles real audit data.
 
 ```bash
-git clone --branch v0.1.0 git@github.com:scottrhodes/gif.git
+git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
 cd gif
 ```
 
@@ -122,14 +122,14 @@ Expected response: `{"status":"ok","service":"gif-mcp-server"}`
 In your adopter tool server, add `gif-enforcement` as a pinned git dependency:
 
 ```bash
-npm install "git+ssh://git@github.com/scottrhodes/gif.git#v0.1.0"
+npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.1.0"
 ```
 
 This adds the following to your `package.json`:
 
 ```json
 "dependencies": {
-  "gif-enforcement": "git+ssh://git@github.com/scottrhodes/gif.git#v0.1.0"
+  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.1.0"
 }
 ```
 

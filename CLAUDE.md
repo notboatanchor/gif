@@ -47,7 +47,7 @@ tool responses or interrupt tool execution.
 
 **gif-enforcement is a versioned git dependency.** Adopter repos declare
 `gif-enforcement` via tag-pinned SSH reference:
-`git+ssh://git@github.com/scottrhodes/gif.git#v0.1.0`. Version bumps require a
+`git+ssh://git@github.com/notboatanchor/gif.git#v0.1.0`. Version bumps require a
 tag in this repo and a dependency update in all adopter repos.
 
 **No secrets in repository.** `.env` is gitignored. Secrets are injected via

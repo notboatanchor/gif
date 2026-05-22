@@ -114,7 +114,7 @@ upgrading the gif server, update the dependency to match:
 1. Edit `package.json` in your tool server:
 
    ```json
-   "gif-enforcement": "git+ssh://git@github.com/scottrhodes/gif.git#v<new-version>"
+   "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v<new-version>"
    ```
 
 2. Reinstall and rebuild:
