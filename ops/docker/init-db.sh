@@ -34,7 +34,12 @@ echo ""
 # ---------------------------------------------------------------------------
 
 echo "  1/4  Bootstrap"
+# Docker compose creates the GIF database fresh — this is the dedicated-database
+# path (GIF-016). Pass -v gif_dedicated_db=on so 000_bootstrap.sql transfers
+# database ownership to gif_admin, granting it CREATE on the database (required
+# by migration 005's CREATE SCHEMA IF NOT EXISTS gif AUTHORIZATION gif_admin).
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$DB" \
+    -v gif_dedicated_db=on \
     -f /schema/000_bootstrap.sql
 
 # ---------------------------------------------------------------------------
