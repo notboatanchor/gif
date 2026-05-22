@@ -255,8 +255,12 @@ async function _validatePersona(
     persona = result.rows[0];
 
   } catch (err) {
+    // pg connection errors often have an empty .message but carry a diagnostic
+    // .code (e.g., 'ECONNREFUSED', '28P01'). Log both so operators get signal
+    // even when the message is empty.
     const message = err instanceof Error ? err.message : 'Unknown database error';
-    console.error(`[gif-enforcement] DB error validating persona ${personaId}:`, message);
+    const code = (err as { code?: string } | null)?.code ?? 'no-code';
+    console.error(`[gif-enforcement] DB error validating persona ${personaId} (code=${code}):`, message);
     return {
       valid:   false,
       reason:  'DB_ERROR',

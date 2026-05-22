@@ -20,6 +20,9 @@
 // Shared singleton used by persona validation and all tool handlers.
 // Connection parameters sourced from environment variables set in
 // docker-compose.yml — never hardcoded.
+//
+// Accepts either PG* (libpq canonical) or POSTGRES_* (common in compose stubs).
+// PG* takes precedence when both are set.
 // =============================================================================
 
 import { Pool } from 'pg';
@@ -27,11 +30,11 @@ import { Pool } from 'pg';
 // Single pool instance shared across the process.
 // pg manages connection lifecycle — do not create per-request pools.
 const pool = new Pool({
-  host:     process.env.PGHOST     || 'localhost',
-  port:     parseInt(process.env.PGPORT || '5432'),
-  user:     process.env.PGUSER     || 'gif_app',
-  password: process.env.PGPASSWORD,
-  database: process.env.PGDATABASE || 'gif',
+  host:     process.env.PGHOST     || process.env.POSTGRES_HOST     || 'localhost',
+  port:     parseInt(process.env.PGPORT || process.env.POSTGRES_PORT || '5432'),
+  user:     process.env.PGUSER     || process.env.POSTGRES_USER     || 'gif_app',
+  password: process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD,
+  database: process.env.PGDATABASE || process.env.POSTGRES_DB       || 'gif',
 
   // Connection pool sizing.
   // Conservative defaults for current single-server deployment.
