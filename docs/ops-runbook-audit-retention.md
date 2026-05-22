@@ -10,7 +10,7 @@
 
 ## Overview
 
-The `audit_events` table uses monthly Postgres declarative partitioning (ADR-025).
+The `audit_events` table uses monthly Postgres declarative partitioning (GIF-010).
 Each partition covers one calendar month (e.g., `audit_events_2026_03` covers
 2026-03-01 through 2026-03-31 inclusive).
 
@@ -65,9 +65,10 @@ Review the output. Note partitions with `retirement_status = RETIRABLE`.
 
 **Step 2 — Verify B2 export (if configured)**
 
-If the B2 export extension is active (rclone configured), confirm the partition
-has been exported before dropping. See ADR-025 for B2 export scope.
-If B2 export is not yet configured, skip this step and note it in the log.
+If an offsite export extension is active (e.g., rclone to B2 or S3), confirm
+the partition has been exported before dropping. Offsite export is
+adopter-configured infrastructure — GIF does not bundle a specific export
+tool. If no export is configured, skip this step and note it in the log.
 
 **Step 3 — Drop each retirable partition**
 
@@ -261,7 +262,7 @@ The RLS policies are defined on the parent table (`audit_events`) and apply to
 all partitions automatically. No per-partition RLS setup is required.
 
 The REVOKE UPDATE must be applied explicitly to each new partition because
-default privileges grant UPDATE to `gif_app` on all new tables. See ADR-025
+default privileges grant UPDATE to `gif_app` on all new tables. See GIF-010
 and Migration 002 comments.
 
 **Verify after creation:**

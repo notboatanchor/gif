@@ -237,6 +237,7 @@ GIF runs under Docker Compose and is fully reproducible from the repository and 
 | Tool registry and registry-driven dispatch | Complete |
 | Enforcement packaging (importable module) | Complete |
 | Schema isolation and per-adopter credentials | Complete |
+| Combination policy primitive (schema, active-policy evaluation, fail-closed semantics; adopter-invoked at domain tool dispatch points per framework boundary) | Complete |
 
 | Provisioner identity binding (identity token at persona_create) | Complete |
 | Governance review gate (`governance_review_status = 'approved'` required for dispatch) | Complete |
@@ -262,6 +263,5 @@ GIF's architectural foundations are correct for regulated-industry deployment. T
 | **Dynamic scope adjustment** | Temporary privilege elevation mid-session with audit justification; required for advanced multi-agent deployments | Medium-term |
 | **Encryption at rest** | Required before productization in external customer deployments | Medium-term |
 | **Multi-tenant operational hardening** | Credential rotation, tenant-specific audit export, tenant isolation testing | Medium-term |
-| **Combination policy enforcement** | Evaluates sequences and combinations of tool calls, not just individual calls; closes primary gap for sophisticated multi-domain deployments | Planned |
 
 The first four items are prerequisites for a Big 4 auditor to rely on GIF's audit trail in a SOC 2 Type II engagement. The next two are prerequisites for deployment in the highest-sensitivity regulated contexts. None require architectural changes to GIF — they are additive controls built on the existing foundation.

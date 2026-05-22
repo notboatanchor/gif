@@ -26,11 +26,12 @@ GIF stands for **Governed Intelligence Framework**. It is infrastructure that si
 
 Think of it as a combination of a **security checkpoint** and a **tamper-proof ledger** specifically designed for AI agents.
 
-It does three things:
+It does four things:
 
 1. **Defines who the AI is acting as** — through a construct called a Persona, which declares what the AI's purpose is and what it's allowed to do
 2. **Enforces those boundaries in real time** — at the exact moment the AI tries to use a tool, before anything happens
-3. **Records everything permanently** — every permitted action, every blocked attempt, every session, in a log that cannot be changed
+3. **Catches risky combinations** — provides a check that lets adopters block calls which would complete a sensitive accumulation of data accesses across a session, not just calls that are individually out of bounds
+4. **Records everything permanently** — every permitted action, every blocked attempt, every session, in a log that cannot be changed
 
 ---
 
@@ -136,7 +137,7 @@ The core GIF logic, packaged as an importable module. When an adopter applicatio
 Any product or application that builds on top of GIF. Each adopter registers its own domain tools against the GIF enforcement layer, with its own Personas and scope definitions. Adopter schemas are separated from GIF's core schema at the database level.
 
 **Combination Policy**
-A rule that governs whether an AI should be allowed to correlate multiple data sources together. A single data source might be innocuous; two or three in combination might create a privacy risk or a liability exposure. Combination policies fire when all sources in a defined set are present in the same AI session — not just individual tool calls, but the accumulation of access across a session.
+A rule declaring that a specific set of data sources, accessed together within an AI session, crosses a governance boundary regardless of whether each individual access is permitted. A query for financial records may be permissible alone; a query for HR records may be permissible alone; a query for communications metadata may be permissible alone. The join of all three — across separate calls in seconds — may not be. GIF provides the policy schema and the evaluator that checks the session's accumulated source set against active policies; adopter tool handlers invoke the evaluator before executing a call that might complete a restricted combination. GIF does not invoke this check automatically — wiring it into the dispatch flow is the adopter's responsibility.
 
 **Partition / Audit Archival**
 Audit records are stored in monthly database partitions. After a defined retention period, old partitions can be retired (dropped) — but only through a governed procedure that checks for active legal holds, logs the retirement event, and requires explicit administrative action. You cannot accidentally lose audit history.

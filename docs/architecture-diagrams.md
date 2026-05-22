@@ -282,7 +282,7 @@ stateDiagram-v2
 
 ---
 
-## 5. Combination Policy Check (ADR-023)
+## 5. Combination Policy Check (GIF-011)
 
 Fires before any tool execution that declares source references.
 
