@@ -1,0 +1,48 @@
+name: Bug Report
+description: Report something not working as documented
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report. GIF is maintained by one person — see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the response-time disclaimer.
+
+        **Security issues:** Do not file here. See [SECURITY.md](../../SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Steps to reproduce, or a minimal code snippet / setup. The more reproducible, the faster a fix.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: GIF version
+      description: Tag or commit SHA.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: postgres
+    attributes:
+      label: PostgreSQL version
+      placeholder: "16"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Audit events, error output, or MCP server logs. Redact anything sensitive before posting.
+      render: shell
+    validations:
+      required: false
