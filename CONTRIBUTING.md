@@ -50,6 +50,32 @@ These constraints are structural — they are not up for reconsideration in a PR
 
 ---
 
+## Release Workflow
+
+GIF uses **trunk-based development** with **semantic versioning** and the **tag-pinned dependency** model documented in [GIF-007](decisions/GIF-007-versioned-git-dependency.md).
+
+**Branching:**
+
+- `main` is the active branch. All work lands here via feature branches.
+- Feature branches use topical prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `schema/`, or `adr/<id>-<slug>` for ADR work.
+- One PR per logical change. Squash-merge to `main`.
+- No long-lived version branches. The release tag is the adopter contract, not a branch.
+
+**Hotfix branches** are created only when a patch release is needed: branch from the relevant release tag, fix, tag the new patch (e.g., `v0.1.1`), optionally keep the branch for future patches on that release line.
+
+**Releases:**
+
+- Tagged releases follow `vMAJOR.MINOR.PATCH` semantic versioning.
+- Breaking changes ship through release candidate tags first: `vX.Y.Z-rc.N`. Each RC is a real install target — adopters can pin to it and report issues before the final tag drops.
+- Each release line that involves breaking changes has two GitHub Milestones: `vX.Y.Z-rc` (tracks RC-phase work) and `vX.Y.Z-final` (tracks issues found during RC that must be resolved before final). This mirrors the pattern the MCP specification team uses for spec releases.
+- Final tags (e.g., `v0.2.0`) ship with curated GitHub Release notes — auto-generated PR list plus a hand-written breaking-changes section linked to the migration guide in `docs/migrations/`.
+
+**Migration documentation:** When a release includes breaking changes, the migration guide in `docs/migrations/vX.Y-to-vX.Z.md` is updated incrementally as each breaking change lands on `main` — not written at the end.
+
+**Issue tracking:** Multi-PR efforts (ADR drafts, breaking-change implementations) use the **Work Tracking** issue template. The tracking issue lists the task checklist; linked PRs auto-tick the boxes via "Closes #N" in the PR description.
+
+---
+
 ## Code Style
 
 **TypeScript:** Strict mode. `skipLibCheck: true` (required for MCP SDK deep generic chains). Tool handlers receive `sessionId` as a parameter — never create a session inside a tool handler.
@@ -85,3 +111,9 @@ If you are working on any of these, open an issue to coordinate — it helps avo
 ## Architecture Decisions
 
 Significant changes to GIF's architecture require an Architecture Decision Record (ADR). The ADR process is documented in the `decisions/` directory. If your contribution involves a new architectural direction, open an issue first to discuss it before writing code.
+
+---
+
+## Code of Conduct
+
+GIF does not yet ship a formal Code of Conduct. The project is solo-maintained with no inbound contributor activity; adding one now would be hygiene theater. When external contributor activity begins — incoming pull requests, third-party issues, MCP Working Group submissions — a Code of Conduct (likely Contributor Covenant 2.1, the convention adopted across the MCP ecosystem) will be added. In the interim, conduct issues should be reported to `security@notboatanchor.com`.

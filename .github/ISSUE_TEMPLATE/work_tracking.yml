@@ -1,0 +1,47 @@
+name: Work Tracking
+description: Track an ADR draft, multi-PR feature, or coordinated release effort
+title: "[Track] "
+labels: ["tracking"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for work that spans multiple PRs — typically an ADR draft, a multi-session implementation, or a coordinated release. The issue becomes the public log; linked PRs auto-tick the task list.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One paragraph framing the work.
+    validations:
+      required: true
+  - type: input
+    id: adr
+    attributes:
+      label: Related ADR
+      description: If this work produces or is gated by an ADR, link it here.
+      placeholder: GIF-018
+    validations:
+      required: false
+  - type: input
+    id: milestone
+    attributes:
+      label: Target milestone
+      placeholder: v0.2.0-rc
+    validations:
+      required: false
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Task checklist
+      description: Markdown task list. Linked PRs auto-tick the boxes (use "Closes #N" in PR description).
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: nonneg
+    attributes:
+      label: Non-negotiables touched
+      description: Which non-negotiables from CLAUDE.md does this work touch, if any?
+    validations:
+      required: false

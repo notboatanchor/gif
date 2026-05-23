@@ -1,0 +1,45 @@
+name: Feature Request
+description: Propose a new capability or enhancement
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the non-negotiables in [CONTRIBUTING.md](../../CONTRIBUTING.md) before submitting. Proposals that conflict with structural constraints (append-only audit trail, MCP-layer enforcement, non-nullable purpose, non-throwing audit logging) cannot be merged.
+
+        For architecture-altering changes, an ADR will be required. Open this issue first so the direction can be discussed before any code is written.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this solve? What use case is currently awkward or impossible?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed solution
+      description: What you would like to see happen. Implementation sketches welcome but not required.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches ruled out, and why.
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Likely scope
+      description: Best guess — maintainer may reclassify.
+      options:
+        - Documentation / clarification
+        - Small fix or improvement
+        - New tool or capability
+        - Architecture decision (ADR required)
+        - Suggested project (separate repo / contributor track)
+    validations:
+      required: true
