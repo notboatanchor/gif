@@ -138,6 +138,7 @@ apply_migration "010_combination_policies.sql"  /schema/010_combination_policies
 apply_migration "011_remove_research_pipeline_tables.sql" \
                                                 /schema/011_remove_research_pipeline_tables.sql
 apply_migration "012_schema_migrations.sql"     /schema/012_schema_migrations.sql
+apply_migration "013_session_v2_semantics.sql"  /schema/013_session_v2_semantics.sql
 
 # ---------------------------------------------------------------------------
 # Step 4: Audit partition management (as gif_admin)
