@@ -196,11 +196,12 @@ export const handler: ToolHandler = {
       type: 'object',
       properties: {
         persona_id:        { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
+        gif_session_id:    { type: 'string', format: 'uuid', description: 'Governance session handle returned by session_start (GIF-019/020)' },
         target_persona_id: { type: 'string', format: 'uuid', description: 'UUID of the persona to revoke' },
         reason:            { type: 'string', minLength: 1, description: 'Reason for revocation — recorded in revocation_log' },
         revoked_by:        { type: 'string', minLength: 1, description: 'Identity of the actor initiating the revocation' },
       },
-      required: ['persona_id', 'target_persona_id', 'reason', 'revoked_by'],
+      required: ['persona_id', 'gif_session_id', 'target_persona_id', 'reason', 'revoked_by'],
     },
   },
   execute: (args, persona, sessionId) =>

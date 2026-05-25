@@ -74,6 +74,17 @@ async function callTool(toolName, args) {
   }
 }
 
+// PR2: per-persona session minter (GIF-019/020). Memoized so multiple
+// governed calls within the test reuse the same handle.
+const sessionHandles = new Map();
+async function startSession(personaId) {
+  if (sessionHandles.has(personaId)) return sessionHandles.get(personaId);
+  const result = await callTool('session_start', { persona_id: personaId });
+  const handle = JSON.parse(result.content[0].text).gif_session_id;
+  sessionHandles.set(personaId, handle);
+  return handle;
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -107,7 +118,8 @@ try {
   if (issuerResult.rows.length === 0) {
     throw new Error('No active persona with manage_personas found');
   }
-  const issuerId = issuerResult.rows[0].persona_id;
+  const issuerId       = issuerResult.rows[0].persona_id;
+  const gif_session_id = await startSession(issuerId);
 
   // Create an assignment for testing
   const assignmentResult = await pool.query(
@@ -131,6 +143,7 @@ try {
 
   const result1 = await callTool('persona_create', {
     persona_id:      issuerId,
+    gif_session_id,
     issuing_entity:  'test_runner',
     purpose:         'Sprint 5 identity binding test persona',
     created_by:      'test_sprint5',
@@ -185,6 +198,7 @@ try {
   // Test 4: re-use of consumed token is rejected
   const result2 = await callTool('persona_create', {
     persona_id:       issuerId,
+    gif_session_id,
     issuing_entity:   'test_runner',
     purpose:          'Should fail — consumed token',
     created_by:       'test_sprint5',
@@ -205,6 +219,7 @@ try {
   const tamperedToken = token.slice(0, -4) + 'ffff';
   const result3 = await callTool('persona_create', {
     persona_id:       issuerId,
+    gif_session_id,
     issuing_entity:   'test_runner',
     purpose:          'Should fail — bad HMAC',
     created_by:       'test_sprint5',
@@ -222,6 +237,7 @@ try {
   // Test 6: persona_create without identity_token is rejected (required field)
   const result4 = await callTool('persona_create', {
     persona_id:       issuerId,
+    gif_session_id,
     issuing_entity:   'test_runner',
     purpose:          'Should fail — no identity_token',
     created_by:       'test_sprint5',

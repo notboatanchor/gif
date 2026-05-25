@@ -101,6 +101,27 @@ export type PersonaInvalidReason =
   | 'DB_ERROR'
   | 'GOVERNANCE_REVIEW_REQUIRED';
 
+// GIF-020 dispatcher session-handle rejection codes. Returned by
+// validateSessionHandle() to classify a presented gif_session_id.
+export type SessionRejectionReason =
+  | 'SESSION_NOT_FOUND'
+  | 'SESSION_PERSONA_MISMATCH'
+  | 'SESSION_CLOSED'
+  | 'SESSION_EXPIRED'
+  | 'SESSION_DB_ERROR';
+
+export type SessionHandleValidationResult =
+  | { valid: true;  sessionId: string }
+  | {
+      valid:          false;
+      reason:         SessionRejectionReason;
+      message:        string;
+      // The session_id to record on the rejection-side audit event.
+      // null when the row does not exist (SESSION_NOT_FOUND) or read failed
+      // (SESSION_DB_ERROR); the gif_session_id otherwise.
+      auditSessionId: string | null;
+    };
+
 export type IdentityBindingResult =
   | { valid: true;  assignmentId: string; externalUserId: string }
   | { valid: false; reason: string };
@@ -140,6 +161,16 @@ export function createEnforcement(pool: Pool) {
 
     closeSession: (sessionId: string) =>
       _closeSession(pool, sessionId),
+
+    // GIF-020 dispatcher primitive. Single PK SELECT on gif.sessions,
+    // classifies into accept or rejection. Closure precedence: closed > expired.
+    // Adopters call this from their tool dispatcher between persona validation
+    // and tool handler execution. Failure-mode is fail-closed.
+    validateSessionHandle: (params: {
+      personaId:    string;
+      gifSessionId: string;
+      ttlSeconds:   number;
+    }) => _validateSessionHandle(pool, params),
 
     logAuditEvent: (params: {
       personaId:        string;
@@ -340,6 +371,104 @@ async function _closeSession(pool: Pool, sessionId: string): Promise<void> {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error(`[gif-enforcement] Failed to close session ${sessionId}:`, message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// _validateSessionHandle()
+// GIF-020 dispatcher primitive: validate a caller-supplied gif_session_id.
+//
+// Single PK SELECT on sessions. Classifies into:
+//   - SESSION_NOT_FOUND          — no row for this UUID
+//   - SESSION_PERSONA_MISMATCH   — row exists but persona_id differs
+//   - SESSION_CLOSED             — ended_at IS NOT NULL (closure precedence)
+//   - SESSION_EXPIRED            — now() > started_at + ttlSeconds
+//   - SESSION_DB_ERROR           — query failed (fail-closed)
+//   - accept                     — none of the above
+//
+// Closure precedence (GIF-020 §Closure precedence): closed wins over expired.
+// auditSessionId is null when no row exists (or DB error); otherwise the
+// gif_session_id, so the rejection-side audit event links to a real row.
+// ---------------------------------------------------------------------------
+
+async function _validateSessionHandle(
+  pool: Pool,
+  params: {
+    personaId:    string;
+    gifSessionId: string;
+    ttlSeconds:   number;
+  }
+): Promise<SessionHandleValidationResult> {
+  const { personaId, gifSessionId, ttlSeconds } = params;
+
+  if (!gifSessionId || typeof gifSessionId !== 'string' || gifSessionId.trim() === '') {
+    return {
+      valid:          false,
+      reason:         'SESSION_NOT_FOUND',
+      message:        'gif_session_id is required and must be a non-empty string',
+      auditSessionId: null,
+    };
+  }
+
+  let row: { persona_id: string; ended_at: Date | null; started_at: Date };
+  try {
+    const result = await pool.query<{ persona_id: string; ended_at: Date | null; started_at: Date }>(
+      `SELECT persona_id, ended_at, started_at
+       FROM sessions
+       WHERE session_id = $1
+       LIMIT 1`,
+      [gifSessionId]
+    );
+
+    if (result.rows.length === 0) {
+      return {
+        valid:          false,
+        reason:         'SESSION_NOT_FOUND',
+        message:        `Session ${gifSessionId} not found`,
+        auditSessionId: null,
+      };
+    }
+    row = result.rows[0];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown database error';
+    const code    = (err as { code?: string } | null)?.code ?? 'no-code';
+    console.error(`[gif-enforcement] DB error validating session ${gifSessionId} (code=${code}):`, message);
+    return {
+      valid:          false,
+      reason:         'SESSION_DB_ERROR',
+      message:        'Internal error during session validation',
+      auditSessionId: null,
+    };
+  }
+
+  if (row.persona_id !== personaId) {
+    return {
+      valid:          false,
+      reason:         'SESSION_PERSONA_MISMATCH',
+      message:        `Session ${gifSessionId} is not owned by persona ${personaId}`,
+      auditSessionId: gifSessionId,
+    };
+  }
+
+  if (row.ended_at !== null) {
+    return {
+      valid:          false,
+      reason:         'SESSION_CLOSED',
+      message:        `Session ${gifSessionId} is closed`,
+      auditSessionId: gifSessionId,
+    };
+  }
+
+  const expiryMs = row.started_at.getTime() + ttlSeconds * 1000;
+  if (Date.now() > expiryMs) {
+    return {
+      valid:          false,
+      reason:         'SESSION_EXPIRED',
+      message:        `Session ${gifSessionId} has expired (started_at: ${row.started_at.toISOString()}, TTL: ${String(ttlSeconds)}s)`,
+      auditSessionId: gifSessionId,
+    };
+  }
+
+  return { valid: true, sessionId: gifSessionId };
 }
 
 // ---------------------------------------------------------------------------

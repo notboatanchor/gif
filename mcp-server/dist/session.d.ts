@@ -15,4 +15,9 @@ export declare const logAuditEvent: (params: {
     humanActorId?: string;
     purposeDeclared?: string;
 }) => Promise<void>;
+export declare const validateSessionHandle: (params: {
+    personaId: string;
+    gifSessionId: string;
+    ttlSeconds: number;
+}) => Promise<import("./enforcement.js").SessionHandleValidationResult>;
 //# sourceMappingURL=session.d.ts.map

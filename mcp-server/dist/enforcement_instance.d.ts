@@ -5,6 +5,11 @@ export declare const gif: {
         invocationContext: Record<string, unknown>;
     }) => Promise<string>;
     closeSession: (sessionId: string) => Promise<void>;
+    validateSessionHandle: (params: {
+        personaId: string;
+        gifSessionId: string;
+        ttlSeconds: number;
+    }) => Promise<import("./enforcement.js").SessionHandleValidationResult>;
     logAuditEvent: (params: {
         personaId: string;
         sessionId: string | null;

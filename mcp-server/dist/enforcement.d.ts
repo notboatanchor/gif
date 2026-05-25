@@ -37,6 +37,16 @@ export type PersonaValidationResult = {
     message: string;
 };
 export type PersonaInvalidReason = 'NOT_FOUND' | 'NOT_ACTIVE' | 'EXPIRED' | 'NOT_YET_VALID' | 'DB_ERROR' | 'GOVERNANCE_REVIEW_REQUIRED';
+export type SessionRejectionReason = 'SESSION_NOT_FOUND' | 'SESSION_PERSONA_MISMATCH' | 'SESSION_CLOSED' | 'SESSION_EXPIRED' | 'SESSION_DB_ERROR';
+export type SessionHandleValidationResult = {
+    valid: true;
+    sessionId: string;
+} | {
+    valid: false;
+    reason: SessionRejectionReason;
+    message: string;
+    auditSessionId: string | null;
+};
 export type IdentityBindingResult = {
     valid: true;
     assignmentId: string;
@@ -63,6 +73,11 @@ export declare function createEnforcement(pool: Pool): {
         invocationContext: Record<string, unknown>;
     }) => Promise<string>;
     closeSession: (sessionId: string) => Promise<void>;
+    validateSessionHandle: (params: {
+        personaId: string;
+        gifSessionId: string;
+        ttlSeconds: number;
+    }) => Promise<SessionHandleValidationResult>;
     logAuditEvent: (params: {
         personaId: string;
         sessionId: string | null;

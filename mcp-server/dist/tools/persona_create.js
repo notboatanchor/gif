@@ -318,6 +318,7 @@ exports.handler = {
             type: 'object',
             properties: {
                 persona_id: { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
+                gif_session_id: { type: 'string', format: 'uuid', description: 'Governance session handle returned by session_start (GIF-019/020)' },
                 issuing_entity: { type: 'string', minLength: 1, description: 'Name of the entity issuing the persona' },
                 purpose: { type: 'string', minLength: 1, description: 'Human-readable declaration of business function' },
                 created_by: { type: 'string', minLength: 1, description: 'Identity of the actor creating the persona' },
@@ -328,7 +329,7 @@ exports.handler = {
                 parent_persona_id: { type: 'string', format: 'uuid', description: 'UUID of parent persona for delegated scope (optional)' },
                 identity_token: { type: 'string', description: 'HMAC-signed identity token from issue_identity_token CLI. Required. Single-use. Binds persona creation to an authenticated human admin identity (ADR-021).' },
             },
-            required: ['persona_id', 'issuing_entity', 'purpose', 'created_by', 'scope_definition', 'valid_until', 'identity_token'],
+            required: ['persona_id', 'gif_session_id', 'issuing_entity', 'purpose', 'created_by', 'scope_definition', 'valid_until', 'identity_token'],
         },
     },
     execute: (args, persona, sessionId) => executePersonaCreate({

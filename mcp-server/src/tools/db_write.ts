@@ -186,11 +186,12 @@ export const handler: ToolHandler = {
     inputSchema: {
       type: 'object',
       properties: {
-        persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
-        table:      { type: 'string', minLength: 1, description: 'Table name to write to' },
-        record:     { type: 'string', description: 'JSON string of the record to insert e.g. {"key":"value"}' },
+        persona_id:     { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+        gif_session_id: { type: 'string', format: 'uuid', description: 'Governance session handle returned by session_start (GIF-019/020)' },
+        table:          { type: 'string', minLength: 1, description: 'Table name to write to' },
+        record:         { type: 'string', description: 'JSON string of the record to insert e.g. {"key":"value"}' },
       },
-      required: ['persona_id', 'table', 'record'],
+      required: ['persona_id', 'gif_session_id', 'table', 'record'],
     },
   },
   execute: (args, persona, sessionId) =>

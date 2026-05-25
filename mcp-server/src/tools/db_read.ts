@@ -220,12 +220,13 @@ export const handler: ToolHandler = {
     inputSchema: {
       type: 'object',
       properties: {
-        persona_id: { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
-        table:      { type: 'string', minLength: 1, description: 'Table name to query' },
-        filters:    { type: 'string', description: 'Optional JSON string of filter conditions e.g. {"status":"active"}' },
-        limit:      { type: 'number', minimum: 1, maximum: 1000, default: 100, description: 'Maximum rows to return' },
+        persona_id:     { type: 'string', format: 'uuid', description: 'UUID of the active persona' },
+        gif_session_id: { type: 'string', format: 'uuid', description: 'Governance session handle returned by session_start (GIF-019/020)' },
+        table:          { type: 'string', minLength: 1, description: 'Table name to query' },
+        filters:        { type: 'string', description: 'Optional JSON string of filter conditions e.g. {"status":"active"}' },
+        limit:          { type: 'number', minimum: 1, maximum: 1000, default: 100, description: 'Maximum rows to return' },
       },
-      required: ['persona_id', 'table'],
+      required: ['persona_id', 'gif_session_id', 'table'],
     },
   },
   execute: (args, persona, sessionId) =>

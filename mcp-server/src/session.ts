@@ -28,6 +28,7 @@
 
 import { gif } from './enforcement_instance.js';
 
-export const createSession  = gif.createSession;
-export const closeSession   = gif.closeSession;
-export const logAuditEvent  = gif.logAuditEvent;
+export const createSession         = gif.createSession;
+export const closeSession          = gif.closeSession;
+export const logAuditEvent         = gif.logAuditEvent;
+export const validateSessionHandle = gif.validateSessionHandle;

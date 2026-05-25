@@ -19,15 +19,22 @@
 // GIF MCP server — entry point
 // Streamable HTTP transport (ADR-002). Listens on PORT (default 3100).
 //
-// Enforcement engine responsibilities:
-//   1. Validate persona (existence, active status, temporal bounds)
-//   2. Create session record (unless tool.skipSession is true)
-//   3. Dispatch to tool handler via TOOL_REGISTRY
-//   4. Log audit event
-//   5. Close session
+// Dispatcher responsibilities (v0.2 — GIF-019/020/022):
+//   1. Validate persona (existence, active status, temporal bounds, governance).
+//   2. For skipSession tools (persona_validate, session_start, session_close):
+//      dispatch directly with no session validation.
+//   3. For governed tools: validate the caller-supplied gif_session_id —
+//      ownership, closed (closure precedence), expired (TTL).
+//   4. On session rejection: emit best-effort audit (session_rejected_closed
+//      for closed/missing/mismatch, session_expired for TTL) and return an
+//      error response.
+//   5. On accept: dispatch to the tool handler with the validated session_id.
+//   6. Log the post-execution audit event linked to that session_id.
+//   7. Do NOT close the session — closure is caller-driven (session_close)
+//      or TTL-driven, per GIF-020.
 //
-// The enforcement engine has no knowledge of which tools exist or what they do.
-// Tools are registered in src/tools/registry.ts (ADR-026, ADR-027).
+// Tools are registered in src/tools/registry.ts (ADR-026, ADR-027). The
+// dispatcher has no knowledge of which tools exist or what they do.
 //
 // ADR-002: Streamable HTTP transport (replaces deprecated SSE transport)
 // ADR-008: MCP server as the AI tool interface layer
@@ -36,6 +43,9 @@
 // ADR-019: MCP server language, runtime, and port assignment
 // ADR-026: MCP server deployment topology
 // ADR-027: GIF packaging model and extraction progression
+// GIF-019: Session handle mint and propagation (gif_session_id as tool arg)
+// GIF-020: Session closure semantics (caller-close + hard TTL)
+// GIF-022: v0.2 conformance surface
 // =============================================================================
 
 import { randomUUID } from 'node:crypto';
@@ -50,10 +60,17 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import http from 'http';
 import { validatePersona } from './persona.js';
-import { createSession, closeSession, logAuditEvent } from './session.js';
+import { logAuditEvent, validateSessionHandle } from './session.js';
 import { TOOL_REGISTRY } from './tools/registry.js';
 
 const PORT = parseInt(process.env.PORT || '3100');
+
+// GIF_SESSION_TTL_SECONDS — deployment-wide hard TTL for governance sessions
+// (GIF-020). Read once at startup. Default 86400 (24 hours).
+const GIF_SESSION_TTL_SECONDS = parseInt(process.env.GIF_SESSION_TTL_SECONDS ?? '86400', 10);
+if (!Number.isFinite(GIF_SESSION_TTL_SECONDS) || GIF_SESSION_TTL_SECONDS <= 0) {
+  throw new Error(`GIF_SESSION_TTL_SECONDS must be a positive integer; got ${process.env.GIF_SESSION_TTL_SECONDS ?? '<unset>'}`);
+}
 
 // ----------------------------------------------------------------------------
 // MCP server factory — one Server instance per session
@@ -109,22 +126,60 @@ function createServer() {
       };
     }
 
-    // skipSession tools (persona_validate) — execute directly, no session or audit
+    // skipSession tools (persona_validate, session_start, session_close) —
+    // execute directly. Session validation does not apply: session_start mints
+    // its own handle, session_close operates on a caller-supplied handle, and
+    // persona_validate produces no audit events.
     if (toolHandler.skipSession) {
       return toolHandler.execute(args, validation.persona, '');
     }
 
-    // All other tools — create session, execute, audit, close session
-    const sessionId = await createSession({
-      personaId:         persona_id,
-      invocationContext: {
-        tool:                name,
-        arguments:           args,
-        persona_purpose:     validation.persona.purpose,
-        persona_valid_until: validation.persona.valid_until,
-      },
+    // Governed tools — validate the caller-supplied gif_session_id (GIF-020).
+    const gif_session_id = args['gif_session_id'] as string | undefined;
+    if (!gif_session_id) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'gif_session_id is required for governed tools — call session_start first',
+      );
+    }
+
+    const sessionCheck = await validateSessionHandle({
+      personaId:    persona_id,
+      gifSessionId: gif_session_id,
+      ttlSeconds:   GIF_SESSION_TTL_SECONDS,
     });
 
+    if (!sessionCheck.valid) {
+      // GIF-020 audit-event mapping:
+      //   SESSION_EXPIRED       → session_expired
+      //   everything else       → session_rejected_closed (source_ref distinguishes)
+      // Audit emission is best-effort (audit-never-throws). DB_ERROR skips the
+      // audit — we don't know the session state, so we don't claim it.
+      if (sessionCheck.reason !== 'SESSION_DB_ERROR') {
+        const eventType = sessionCheck.reason === 'SESSION_EXPIRED'
+          ? 'session_expired'
+          : 'session_rejected_closed';
+        await logAuditEvent({
+          personaId:       persona_id,
+          sessionId:       sessionCheck.auditSessionId,
+          eventType,
+          toolName:        name,
+          outcome:         'rejected',
+          sourceRef:       sessionCheck.reason,
+          purposeDeclared: validation.persona.purpose,
+        });
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          valid:   false,
+          reason:  sessionCheck.reason,
+          message: sessionCheck.message,
+        }) }],
+        isError: true,
+      };
+    }
+
+    const sessionId = sessionCheck.sessionId;
     let result: Awaited<ReturnType<typeof toolHandler.execute>> | undefined;
 
     try {
@@ -154,7 +209,8 @@ function createServer() {
         humanActorId,
         purposeDeclared: validation.persona.purpose,
       });
-      await closeSession(sessionId);
+      // Session is NOT closed here (GIF-020). Closure is caller-driven via
+      // session_close or TTL-driven via lazy expiry on the next call.
     }
 
     return result;
@@ -298,6 +354,7 @@ httpServer.listen(PORT, () => {
   console.log(`[server] Health: http://localhost:${String(PORT)}/health`);
   console.log(`[server] MCP:    http://localhost:${String(PORT)}/mcp`);
   console.log(`[server] Tools registered: ${Array.from(TOOL_REGISTRY.keys()).join(', ')}`);
+  console.log(`[server] GIF_SESSION_TTL_SECONDS=${String(GIF_SESSION_TTL_SECONDS)}`);
 });
 
 process.on('SIGTERM', () => {
