@@ -5,7 +5,7 @@ export declare const createSession: (params: {
 export declare const closeSession: (sessionId: string) => Promise<void>;
 export declare const logAuditEvent: (params: {
     personaId: string;
-    sessionId: string;
+    sessionId: string | null;
     eventType: string;
     toolName: string;
     outcome: string;

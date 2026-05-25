@@ -65,7 +65,7 @@ export declare function createEnforcement(pool: Pool): {
     closeSession: (sessionId: string) => Promise<void>;
     logAuditEvent: (params: {
         personaId: string;
-        sessionId: string;
+        sessionId: string | null;
         eventType: string;
         toolName: string;
         outcome: string;
