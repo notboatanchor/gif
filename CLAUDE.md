@@ -67,12 +67,33 @@ action. An AI doing legitimate work has no reason to enumerate other personas.
 blocks any persona with a status other than `approved`. Do not suggest weakening
 or bypassing this check.
 
+**`gif_session_id` is required on every governed tool's `inputSchema`.** Type
+must be `string` with `uuid` format; the dispatcher pre-validates the handle
+via `validateSessionHandle` before tool execution. Tool handlers never
+re-implement session validation — they receive the validated `sessionId` as a
+parameter and trust it. See GIF-019, GIF-022 §C2.
+
+**Dispatcher does not auto-close sessions.** Session closure is caller-driven
+(`session_close` tool) or TTL-driven (`GIF_SESSION_TTL_SECONDS`, default
+86400). Do not add a `finally`-block close on the dispatch path — v0.1's
+per-call auto-close is the behavior v0.2 removes. See GIF-020.
+
+**`validateSessionHandle` is the exported adopter-contract primitive.**
+Adopters import it from `gif-enforcement` and call it as the single source of
+truth for session-handle validity. Adopters must not re-implement closure
+precedence (closed > expired) or TTL handling. `GIF_SESSION_TTL_SECONDS` is
+parsed once at process startup with fail-fast on misconfig (non-finite or
+non-positive). See GIF-020, GIF-022 §C2.
+
 ---
 
 ## Compliance Hardening Roadmap
 
 Near-term items before first regulated-industry deployment:
-- Cryptographic log signing (hash chains + external timestamping)
+- Cryptographic log signing — chain verifier CLI (hash chain trigger landed
+  in migration 006; verifier walks partitions, recomputes SHA-256, reports
+  mismatches and chain breaks)
+- External timestamping anchors for the audit hash chain
 - User-to-persona identity binding with verification — provisioner accountability
   is done (mandatory `identity_token` at `persona_create`); runtime session
   binding (structural proof that the AI making calls holds the assigned
