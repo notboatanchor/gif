@@ -39,6 +39,8 @@ export type {
   IdentityBindingResult,
   EnforcementAction,
   CombinationPolicyCheckResult,
+  SessionRejectionReason,
+  SessionHandleValidationResult,
 } from './enforcement.js';
 
 // Functions — delegated to pool-bound enforcement instance

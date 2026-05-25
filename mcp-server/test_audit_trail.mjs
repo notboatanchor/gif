@@ -194,6 +194,14 @@ const transport = new StreamableHTTPClientTransport(new URL(`${MCP_URL}/mcp`));
 const mcp = new McpClient({ name: 'sprint3-test', version: '0.1.0' }, { capabilities: {} });
 await mcp.connect(transport);
 
+// PR2: mint a v0.2 governance session handle (GIF-019/020) for all governed
+// calls in this test.
+const startResult = await mcp.callTool({
+  name: 'session_start',
+  arguments: { persona_id: personaId },
+});
+const gif_session_id = JSON.parse(startResult.content[0].text).gif_session_id;
+
 // Record violation count before the blocked call
 const violationsBefore = await pool.query(
   `SELECT count(*) AS cnt FROM scope_violations WHERE persona_id = $1`,
@@ -208,6 +216,7 @@ const scopeTestResult = await mcp.callTool({
   name: 'db_read',
   arguments: {
     persona_id: personaId,
+    gif_session_id,
     table: 'retention_holds',
     limit: 1,
   },
@@ -255,6 +264,7 @@ await mcp.callTool({
   name: 'db_read',
   arguments: {
     persona_id: personaId,
+    gif_session_id,
     table: 'sessions',
     limit: 1,
   },
@@ -342,6 +352,12 @@ if (reconstruction.rows.length > 0) {
 // ---------------------------------------------------------------------------
 // Cleanup and summary
 // ---------------------------------------------------------------------------
+
+// Explicit caller-close per GIF-020.
+await mcp.callTool({
+  name: 'session_close',
+  arguments: { persona_id: personaId, gif_session_id },
+});
 
 await mcp.close();
 await pool.end();

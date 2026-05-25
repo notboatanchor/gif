@@ -1,4 +1,4 @@
-export type { Persona, ScopeDefinition, PersonaStatus, GovernanceReviewStatus, EnforcementLayer, PersonaValidationResult, PersonaInvalidReason, IdentityBindingResult, EnforcementAction, CombinationPolicyCheckResult, } from './enforcement.js';
+export type { Persona, ScopeDefinition, PersonaStatus, GovernanceReviewStatus, EnforcementLayer, PersonaValidationResult, PersonaInvalidReason, IdentityBindingResult, EnforcementAction, CombinationPolicyCheckResult, SessionRejectionReason, SessionHandleValidationResult, } from './enforcement.js';
 export declare const validatePersona: (personaId: string) => Promise<import("./enforcement.js").PersonaValidationResult>;
 export declare const logScopeViolation: (params: {
     personaId: string;

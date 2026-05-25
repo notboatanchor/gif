@@ -58,6 +58,17 @@ async function callTool(toolName, args) {
   }
 }
 
+// PR2: per-persona session minter (GIF-019/020). Memoized per persona_id so
+// multiple governed calls within the test reuse the same handle.
+const sessionHandles = new Map();
+async function startSession(personaId) {
+  if (sessionHandles.has(personaId)) return sessionHandles.get(personaId);
+  const result = await callTool('session_start', { persona_id: personaId });
+  const handle = JSON.parse(result.content[0].text).gif_session_id;
+  sessionHandles.set(personaId, handle);
+  return handle;
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -100,10 +111,12 @@ try {
     const beforeRead = new Date().toISOString();
 
     // Test 1: db_read on audit_events creates a read_log row
+    const readerSession = await startSession(readerId);
     await callTool('db_read', {
-      persona_id: readerId,
-      table:      'audit_events',
-      limit:      5,
+      persona_id:     readerId,
+      gif_session_id: readerSession,
+      table:          'audit_events',
+      limit:          5,
     });
 
     // Small delay to let fire-and-forget INSERT land
@@ -159,10 +172,13 @@ try {
     );
 
     if (personaReader.rows.length > 0) {
+      const otherReaderId      = personaReader.rows[0].persona_id;
+      const otherReaderSession = await startSession(otherReaderId);
       await callTool('db_read', {
-        persona_id: personaReader.rows[0].persona_id,
-        table:      'tool_registry',
-        limit:      3,
+        persona_id:     otherReaderId,
+        gif_session_id: otherReaderSession,
+        table:          'tool_registry',
+        limit:          3,
       });
 
       await new Promise(r => setTimeout(r, 200));

@@ -60,17 +60,33 @@ const client = new Client({ name: 'test-client', version: '0.1.0' }, { capabilit
 await client.connect(transport);
 console.log('[test_mcp] Connected');
 
-// db_read — round-trip through enforcement engine: validate, session, audit, close
+// PR2: mint a v0.2 governance session handle (GIF-019/020) and thread it
+// through every governed-tool call as gif_session_id.
+const startResult = await client.callTool({
+  name: 'session_start',
+  arguments: { persona_id: PERSONA_ID },
+});
+const gif_session_id = JSON.parse(startResult.content[0].text).gif_session_id;
+console.log(`[test_mcp] gif_session_id: ${gif_session_id}`);
+
+// db_read — round-trip through dispatcher: persona check, session check, audit
 console.log('[test_mcp] Calling db_read...');
 const dbResult = await client.callTool({
   name: 'db_read',
   arguments: {
-    persona_id: PERSONA_ID,
-    table:      'tool_registry',
-    limit:      3,
+    persona_id:     PERSONA_ID,
+    gif_session_id,
+    table:          'tool_registry',
+    limit:          3,
   },
 });
 console.log('[test_mcp] db_read result:', JSON.stringify(dbResult, null, 2));
+
+// Explicit caller-close per GIF-020.
+await client.callTool({
+  name: 'session_close',
+  arguments: { persona_id: PERSONA_ID, gif_session_id },
+});
 
 await client.close();
 console.log('[test_mcp] Done');

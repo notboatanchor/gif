@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logAuditEvent = exports.closeSession = exports.createSession = void 0;
+exports.validateSessionHandle = exports.logAuditEvent = exports.closeSession = exports.createSession = void 0;
 // src/session.ts
 // =============================================================================
 // Session management — re-export shim (ADR-027)
@@ -31,4 +31,5 @@ const enforcement_instance_js_1 = require("./enforcement_instance.js");
 exports.createSession = enforcement_instance_js_1.gif.createSession;
 exports.closeSession = enforcement_instance_js_1.gif.closeSession;
 exports.logAuditEvent = enforcement_instance_js_1.gif.logAuditEvent;
+exports.validateSessionHandle = enforcement_instance_js_1.gif.validateSessionHandle;
 //# sourceMappingURL=session.js.map

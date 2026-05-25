@@ -118,6 +118,14 @@ const transport = new StreamableHTTPClientTransport(new URL(`${SERVER_URL}/mcp`)
 const client    = new Client({ name: 'sprint4-test', version: '1.0.0' }, { capabilities: {} });
 await client.connect(transport);
 
+// PR2: mint a v0.2 governance session handle (GIF-019/020) for all governed
+// calls in this test under the admin persona.
+const startResult = await client.callTool({
+  name: 'session_start',
+  arguments: { persona_id: ADMIN_PERSONA_ID },
+});
+const gif_session_id = JSON.parse(startResult.content[0].text).gif_session_id;
+
 let parentPersonaId = null;
 let childPersonaId  = null;
 let revocationTargetId = null;
@@ -130,6 +138,7 @@ try {
 
   const registryResult = await callTool(client, 'db_read', {
     persona_id: ADMIN_PERSONA_ID,
+    gif_session_id,
     table:      'tool_registry',
     filters:    JSON.stringify({ status: 'active' }),
     limit:      20,
@@ -156,6 +165,7 @@ try {
 
   const parentResult = await callTool(client, 'persona_create', {
     persona_id:           ADMIN_PERSONA_ID,
+    gif_session_id,
     issuing_entity:       'Sprint 4 Test',
     purpose:              'Parent persona for delegation chain test',
     created_by:           'test_sprint4.mjs',
@@ -179,6 +189,7 @@ try {
   // Create child persona with a subset of parent scope
   const childResult = await callTool(client, 'persona_create', {
     persona_id:           ADMIN_PERSONA_ID,
+    gif_session_id,
     issuing_entity:       'Sprint 4 Test',
     purpose:              'Child persona for delegation chain test',
     created_by:           'test_sprint4.mjs',
@@ -203,6 +214,7 @@ try {
   // Verify delegation_chain record written
   const chainResult = await callTool(client, 'db_read', {
     persona_id: ADMIN_PERSONA_ID,
+    gif_session_id,
     table:      'delegation_chain',
     filters:    JSON.stringify({ child_persona_id: childPersonaId }),
     limit:      1,
@@ -221,6 +233,7 @@ try {
 
   const exceededScopeResult = await callTool(client, 'persona_create', {
     persona_id:           ADMIN_PERSONA_ID,
+    gif_session_id,
     issuing_entity:       'Sprint 4 Test',
     purpose:              'Persona attempting to exceed parent scope',
     created_by:           'test_sprint4.mjs',
@@ -246,6 +259,7 @@ try {
   // child's max_delegation_depth=1, so depth 2 > 1 — should be rejected
   const grandchildResult = await callTool(client, 'persona_create', {
     persona_id:           ADMIN_PERSONA_ID,
+    gif_session_id,
     issuing_entity:       'Sprint 4 Test',
     purpose:              'Grandchild persona exceeding delegation depth',
     created_by:           'test_sprint4.mjs',
@@ -270,6 +284,7 @@ try {
   // Create a persona to revoke
   const revokeTargetResult = await callTool(client, 'persona_create', {
     persona_id:       ADMIN_PERSONA_ID,
+    gif_session_id,
     issuing_entity:   'Sprint 4 Test',
     purpose:          'Persona created to test revocation session handling',
     created_by:       'test_sprint4.mjs',
@@ -292,6 +307,7 @@ try {
 
     const revokeResult = await callTool(client, 'persona_revoke', {
       persona_id:        ADMIN_PERSONA_ID,
+      gif_session_id,
       target_persona_id: revocationTargetId,
       reason:            'Sprint 4 test: revocation session termination test',
       revoked_by:        'test_sprint4.mjs',
@@ -306,6 +322,7 @@ try {
     // Verify revocation_log records active_sessions_terminated
     const logResult = await callTool(client, 'db_read', {
       persona_id: ADMIN_PERSONA_ID,
+      gif_session_id,
       table:      'revocation_log',
       filters:    JSON.stringify({ persona_id: revocationTargetId }),
       limit:      1,
@@ -335,6 +352,7 @@ try {
   if (childPersonaId) {
     await callTool(client, 'persona_revoke', {
       persona_id:        ADMIN_PERSONA_ID,
+      gif_session_id,
       target_persona_id: childPersonaId,
       reason:            'Sprint 4 test cleanup',
       revoked_by:        'test_sprint4.mjs',
@@ -343,11 +361,18 @@ try {
   if (parentPersonaId) {
     await callTool(client, 'persona_revoke', {
       persona_id:        ADMIN_PERSONA_ID,
+      gif_session_id,
       target_persona_id: parentPersonaId,
       reason:            'Sprint 4 test cleanup',
       revoked_by:        'test_sprint4.mjs',
     }).catch(() => {});
   }
+
+  // Explicit caller-close per GIF-020.
+  await client.callTool({
+    name: 'session_close',
+    arguments: { persona_id: ADMIN_PERSONA_ID, gif_session_id },
+  }).catch(() => {});
 
   await client.close();
   await pool.end();
