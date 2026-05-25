@@ -143,7 +143,7 @@ export function createEnforcement(pool: Pool) {
 
     logAuditEvent: (params: {
       personaId:        string;
-      sessionId:        string;
+      sessionId:        string | null;
       eventType:        string;
       toolName:         string;
       outcome:          string;
@@ -351,7 +351,7 @@ async function _logAuditEvent(
   pool: Pool,
   params: {
     personaId:        string;
-    sessionId:        string;
+    sessionId:        string | null;
     eventType:        string;
     toolName:         string;
     outcome:          string;
@@ -391,7 +391,7 @@ async function _logAuditEvent(
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         personaId,
-        sessionId,
+        sessionId ?? null,
         eventType,
         toolName,
         outcome,
@@ -404,7 +404,7 @@ async function _logAuditEvent(
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`[gif-enforcement] Failed to log audit event for session ${sessionId}:`, message);
+    console.error(`[gif-enforcement] Failed to log audit event for session ${sessionId ?? '<none>'}:`, message);
   }
 }
 

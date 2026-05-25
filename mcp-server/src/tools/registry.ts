@@ -40,6 +40,8 @@ import type { ToolHandler } from './types.js';
 import { handler as personaValidateHandler } from './persona_validate.js';
 import { handler as personaCreateHandler   } from './persona_create.js';
 import { handler as personaRevokeHandler   } from './persona_revoke.js';
+import { handler as sessionStartHandler    } from './session_start.js';
+import { handler as sessionCloseHandler    } from './session_close.js';
 
 // Reference implementation adopter tools
 import { handler as dbReadHandler  } from './db_read.js';
@@ -56,6 +58,8 @@ export const TOOL_REGISTRY = new Map<string, ToolHandler>([
   [personaValidateHandler.definition.name, personaValidateHandler],
   [personaCreateHandler.definition.name,   personaCreateHandler],
   [personaRevokeHandler.definition.name,   personaRevokeHandler],
+  [sessionStartHandler.definition.name,    sessionStartHandler],
+  [sessionCloseHandler.definition.name,    sessionCloseHandler],
 
   // Adopter tools — reference implementation
   [dbReadHandler.definition.name,  dbReadHandler],

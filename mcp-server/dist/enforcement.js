@@ -201,7 +201,7 @@ async function _logAuditEvent(pool, params) {
          purpose_declared
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [
             personaId,
-            sessionId,
+            sessionId ?? null,
             eventType,
             toolName,
             outcome,
@@ -214,7 +214,7 @@ async function _logAuditEvent(pool, params) {
     }
     catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`[gif-enforcement] Failed to log audit event for session ${sessionId}:`, message);
+        console.error(`[gif-enforcement] Failed to log audit event for session ${sessionId ?? '<none>'}:`, message);
     }
 }
 // ---------------------------------------------------------------------------

@@ -20,6 +20,8 @@ exports.TOOL_REGISTRY = void 0;
 const persona_validate_js_1 = require("./persona_validate.js");
 const persona_create_js_1 = require("./persona_create.js");
 const persona_revoke_js_1 = require("./persona_revoke.js");
+const session_start_js_1 = require("./session_start.js");
+const session_close_js_1 = require("./session_close.js");
 // Reference implementation adopter tools
 const db_read_js_1 = require("./db_read.js");
 const db_write_js_1 = require("./db_write.js");
@@ -33,6 +35,8 @@ exports.TOOL_REGISTRY = new Map([
     [persona_validate_js_1.handler.definition.name, persona_validate_js_1.handler],
     [persona_create_js_1.handler.definition.name, persona_create_js_1.handler],
     [persona_revoke_js_1.handler.definition.name, persona_revoke_js_1.handler],
+    [session_start_js_1.handler.definition.name, session_start_js_1.handler],
+    [session_close_js_1.handler.definition.name, session_close_js_1.handler],
     // Adopter tools — reference implementation
     [db_read_js_1.handler.definition.name, db_read_js_1.handler],
     [db_write_js_1.handler.definition.name, db_write_js_1.handler],
