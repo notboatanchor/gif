@@ -2,6 +2,12 @@
 
 **Status:** Accepted
 **Date:** 2026-05-24
+**Amended:** 2026-05-27 — editorial corrections surfaced while implementing
+the C-series conformance scenarios in `mcp-server/conformance/`. The audit-trail read
+surface is `db_read(table='audit_events')` gated by the audit-class read
+scope (`read` + `audit_events`), not a `read_log` tool gated by `admin_read`;
+and C2.7 audits four (not five) rejection cases. No normative MUST changed —
+only the descriptions are corrected to match the reference implementation.
 
 ## Decision
 
@@ -53,7 +59,8 @@ specified format or structure for conformance test harnesses; this ADR
 does not assume one. The MUSTs below are stated as behavioral
 requirements observable through the MCP tool surface (`tools/list`
 introspection, tool dispatch, response shapes) and the audit-trail
-read surface (the existing `read_log` tool gated by `admin_read`).
+read surface (the `db_read` tool with `table = 'audit_events'`, gated by
+the audit-class read scope).
 When SEP-2484 evolves to specify harness conventions, those will land
 additively in a follow-on ADR; nothing in GIF-022 forecloses them.
 
@@ -127,12 +134,15 @@ specification; this ADR consolidates and surfaces them.
   satisfying `now() > sessions.started_at +
   GIF_SESSION_TTL_SECONDS` MUST be rejected with the expired-
   session error condition. (GIF-020)
-- **C2.7** All four rejection cases above (missing handle, unknown
+- **C2.7** All four session-handle rejection cases above (unknown
   handle, persona mismatch, closed, expired) MUST emit an audit
-  event recording the rejection. The audit emission is
-  best-effort per the audit-never-throws non-negotiable; a failed
-  emission does not change the rejection response. (CLAUDE.md
-  audit-never-throws, GIF-020 §C6)
+  event recording the rejection. (The missing-`gif_session_id`
+  case is rejected at the protocol layer with an `InvalidParams`
+  error before handle validation runs and emits no audit event —
+  a malformed request is not a governance rejection.) The audit
+  emission is best-effort per the audit-never-throws
+  non-negotiable; a failed emission does not change the rejection
+  response. (CLAUDE.md audit-never-throws, GIF-020 §C6)
 
 ### Category 3 — Closure
 
@@ -180,19 +190,24 @@ specification; this ADR consolidates and surfaces them.
   are permitted; the four listed are the minimum surface.
   (GIF-019, GIF-020)
 - **C4.3** Every lifecycle audit event MUST link to a
-  `session_id` — either the newly-minted one for `session_start`,
-  or the existing one for the other three types. (GIF-019,
-  GIF-020)
+  `session_id` — the newly-minted one for `session_start`, or the
+  existing one for `session_close`, `session_expired`, and the
+  closed-handle case of `session_rejected_closed`. The one
+  exception is the unknown-handle dispatch rejection (C2.3), which
+  emits a `session_rejected_closed` event with `session_id = NULL`
+  because no session exists to reference. (GIF-019, GIF-020)
 - **C4.4** Audit event emission MUST NOT throw into the tool
   response path. A failed audit INSERT MUST be logged
   out-of-band and MUST NOT change the response the caller
   receives. (CLAUDE.md audit-never-throws non-negotiable)
-- **C4.5** The audit trail MUST be readable via the existing
-  `read_log` MCP tool with `admin_read` action, gated by the
-  documented admin-read permission surface. A conformance harness
-  reads audit events through this tool, not through direct
-  database access. (CLAUDE.md `personas` admin-read gating
-  non-negotiable, by extension to audit-table read access)
+- **C4.5** The audit trail MUST be readable via the `db_read` MCP
+  tool with `table = 'audit_events'`, gated by the audit-class
+  read scope (the `read` action plus `audit_events` in the
+  persona's `permitted_sources`). A conformance harness reads
+  audit events through this tool, not through direct database
+  access. (CLAUDE.md append-only audit trail; audit-table read
+  access is scope-gated and distinct from the `personas`
+  `admin_read` gate of C6.2.)
 
 ### Category 5 — Combination policy scoping
 
@@ -216,9 +231,9 @@ specification; this ADR consolidates and surfaces them.
   creation without `identity_token` is non-conformant. (CLAUDE.md
   `identity_token` mandatory non-negotiable, GIF-014)
 - **C6.2** The `personas` table MUST be reachable from MCP only
-  through the `admin_read` action, never through generic
-  `read_log` queries. An implementation that includes `personas`
-  in the application-user readable-table allowlist is
+  through the `admin_read` action, never through the generic
+  `read` action on `db_read`. An implementation that includes
+  `personas` in the application-user readable-table allowlist is
   non-conformant. (CLAUDE.md admin-read gating non-negotiable)
 - **C6.3** Dispatch MUST reject any persona with
   `governance_review_status != 'approved'`. An implementation
@@ -290,10 +305,11 @@ running implementation, the implementation MUST expose:
   `gif_session_id` arguments and observable response shapes for
   both success and rejection. (Used to assert C2.2–C2.7, C3.3–C3.5,
   C6.3.)
-- **Audit-trail read access via `read_log` with `admin_read`**
-  scope, returning audit events filterable by `session_id` and
-  `event_type`. (Used to assert C1.5, C1.6, C3.4, C3.5, C4.1–C4.5,
-  C5.1, C5.2.)
+- **Audit-trail read access via `db_read` (`table =
+  'audit_events'`)** gated by the audit-class read scope (`read`
+  action + `audit_events` in `permitted_sources`), returning audit
+  events filterable by `session_id` and `event_type`. (Used to
+  assert C1.5, C1.6, C3.4, C3.5, C4.1–C4.5, C5.1, C5.2.)
 
 These three surfaces are sufficient. A conformance harness does
 not require direct database access, does not require
@@ -333,9 +349,11 @@ single referenceable specification.
 - **Conformance test access controls.** Whether a conformance
   harness uses a dedicated admin persona, a separate test-only
   scope, or any other access pattern is implementation-defined.
-  The reference implementation expects the harness to use an
-  `admin_read`-capable persona; other patterns are conformant if
-  they meet the C4.5 read-access requirement.
+  The reference implementation expects the harness to use a
+  persona with the audit-class read scope (`read` + `audit_events`)
+  for audit-trail reads and an `admin_read`-capable persona for the
+  `personas` table; other patterns are conformant if they meet the
+  C4.5 and C6.2 read-access requirements.
 - **Backward-conformance with v0.1.** v0.1 had no equivalent
   surface; v0.2 conformance is a clean break per M4 (no silent
   fallback).
