@@ -2,12 +2,26 @@
 
 **Status:** Accepted
 **Date:** 2026-05-24
-**Amended:** 2026-05-27 — editorial corrections surfaced while implementing
-the C-series conformance scenarios in `mcp-server/conformance/`. The audit-trail read
-surface is `db_read(table='audit_events')` gated by the audit-class read
-scope (`read` + `audit_events`), not a `read_log` tool gated by `admin_read`;
-and C2.7 audits four (not five) rejection cases. No normative MUST changed —
-only the descriptions are corrected to match the reference implementation.
+**Amended:**
+
+- 2026-05-27 — editorial corrections surfaced while implementing the
+  C-series conformance scenarios in `mcp-server/conformance/`. The
+  audit-trail read surface is `db_read(table='audit_events')` gated
+  by the audit-class read scope (`read` + `audit_events`), not a
+  `read_log` tool gated by `admin_read`; and C2.7 audits four (not
+  five) rejection cases. No normative MUST changed — only the
+  descriptions are corrected to match the reference implementation.
+- 2026-05-27 — §C5 scope clarification. Combination-policy MUSTs are
+  primitive-level rather than MCP-surface MUSTs. No governed gif MCP
+  tool invokes `checkCombinationPolicies` (the primitive is adopter-
+  invoked per ADR-022), so C5.1–C5.3 are verified at the primitive
+  by `mcp-server/test_combination_policies.mjs` rather than through
+  the three MCP surfaces used for C1–C4 and C6. The suite stub at
+  `mcp-server/conformance/c5_combination_scoping.mjs` documents this
+  and asserts the primitive coverage stays wired into the test
+  runner. On extraction to `gif-spec`, C5.x maps to SEP-2484
+  documented exclusions (not-protocol-observable). The MUSTs
+  themselves are unchanged — only the verification surface is named.
 
 ## Decision
 
@@ -211,6 +225,22 @@ specification; this ADR consolidates and surfaces them.
 
 ### Category 5 — Combination policy scoping
 
+*Verification surface — primitive-level.* The Category 5 MUSTs apply
+to the `checkCombinationPolicies` enforcement primitive exported
+from `gif-enforcement`. The primitive is adopter-invoked per
+ADR-022; no governed MCP tool in the reference implementation calls
+it, so C5.1–C5.3 are not observable through the three MCP surfaces
+named in §What a Conformance Harness Needs to Introspect. They are
+verified at the primitive level by
+`mcp-server/test_combination_policies.mjs` (case 5 in particular
+witnesses the accumulation behavior asserted by C5.1 and C5.2), and
+pointed at from the suite stub
+`mcp-server/conformance/c5_combination_scoping.mjs`. C5.3 is
+satisfied transitively by C2.2–C2.6 — invalid-handle calls are
+rejected before reaching the combination-policy evaluation point.
+On extraction to `gif-spec`, C5.x entries map to SEP-2484 documented
+exclusions (not-protocol-observable flavor).
+
 - **C5.1** Combination policy accumulation MUST scope to a single
   `gif_session_id`. The accumulation query reads `audit_events`
   filtered by `session_id`. (GIF-011, GIF-019)
@@ -309,7 +339,8 @@ running implementation, the implementation MUST expose:
   'audit_events'`)** gated by the audit-class read scope (`read`
   action + `audit_events` in `permitted_sources`), returning audit
   events filterable by `session_id` and `event_type`. (Used to
-  assert C1.5, C1.6, C3.4, C3.5, C4.1–C4.5, C5.1, C5.2.)
+  assert C1.5, C1.6, C3.4, C3.5, C4.1–C4.5. C5.x is verified at the
+  enforcement primitive — see §Category 5.)
 
 These three surfaces are sufficient. A conformance harness does
 not require direct database access, does not require
