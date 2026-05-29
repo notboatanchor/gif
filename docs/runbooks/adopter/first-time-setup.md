@@ -137,6 +137,13 @@ This adds the following to your `package.json`:
 }
 ```
 
+> **Release candidate.** Adopters tracking the MCP 2026-07-28 spec can pin to
+> `#v0.2.0-rc.1` instead. The v0.2 substrate uses the MCP SDK 2.0 split-package
+> layout (ESM-only) and changes the tool-call contract to require an explicit
+> `gif_session_id`. See [`docs/migrations/v0.1-to-v0.2.md`](../../migrations/v0.1-to-v0.2.md)
+> for the full adopter contract — package.json changes, the `@cfworker/json-schema`
+> peer dep, ESM requirement, and `v0.1 → v0.2` import map.
+
 In your server code, inject your own `pg.Pool` into `createEnforcement`. gif
 enforcement runs under whichever credentials your pool uses — do not modify gif
 source code.

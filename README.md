@@ -111,7 +111,9 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 
 ## Current State
 
-GIF is at v0.1.0. Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite spans 8 test files (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies) and runs on every commit via CI. TypeScript strict mode throughout.
+GIF v0.1.0 is the stable substrate (MCP SDK v1). Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite spans 8 test files (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies) and runs on every commit via CI. TypeScript strict mode throughout.
+
+**Release candidate (v0.2 substrate).** `v0.2.0-rc.1` is available for adopters tracking the MCP 2026-07-28 spec. It carries the same enforcement core on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0-alpha.2`), is ESM-only, and adds the v0.2 governance-session semantics (explicit `gif_session_id`, caller-driven close, TTL). See [`docs/migrations/v0.1-to-v0.2.md`](docs/migrations/v0.1-to-v0.2.md) for the full migration contract, including the `@cfworker/json-schema` peer-dep and `"type": "module"` requirements. `v0.2.0-rc.1` will track MCP SDK 2.0 prereleases through the RC window; pin to `^2.0.0` semantics arrive at `v0.2.0` final.
 
 Shipped capabilities:
 
