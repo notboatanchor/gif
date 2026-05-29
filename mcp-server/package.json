@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "description": "GIF MCP server — AI tool interface and persona enforcement layer",
   "license": "Apache-2.0",
+  "type": "module",
   "main": "dist/index.js",
   "exports": {
     ".": {
       "import": "./dist/enforcement.js",
-      "require": "./dist/enforcement.js",
       "types": "./dist/enforcement.d.ts"
     }
   },
@@ -15,13 +15,15 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "node --loader ts-node/esm src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "node test_setup.mjs && node test_mcp.mjs && node test_audit_trail.mjs && node test_delegation.mjs && node test_hash_chain.mjs && node test_identity_binding.mjs && node test_read_log.mjs && node test_retention.mjs && node test_combination_policies.mjs && node test_session_lifecycle.mjs && node test_session_dispatch.mjs && node conformance/c1_handle_mint.mjs && node conformance/c2_dispatch_validation.mjs && node conformance/c3_closure.mjs && node conformance/c4_audit_emission.mjs && node conformance/c5_combination_scoping.mjs && node conformance/c6_identity_gates.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@modelcontextprotocol/server": "2.0.0-alpha.2",
+    "@modelcontextprotocol/node": "2.0.0-alpha.2",
+    "@cfworker/json-schema": "^4.1.1",
     "pg": "^8.11.3",
     "zod": "^3.22.4"
   },

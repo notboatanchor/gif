@@ -29,6 +29,7 @@
 // ADR-027: GIF packaging model and extraction progression
 // =============================================================================
 
+import type { Tool } from '@modelcontextprotocol/server';
 import type { Persona } from '../persona.js';
 
 export type ToolResult = {
@@ -38,11 +39,7 @@ export type ToolResult = {
 
 export interface ToolHandler {
   // MCP tool definition — returned verbatim in ListTools responses.
-  definition: {
-    name:        string;
-    description: string;
-    inputSchema: object;
-  };
+  definition: Tool;
 
   // Tool execution function. Always receives validated persona and sessionId.
   // Session is created before execute() is called unless skipSession is true.

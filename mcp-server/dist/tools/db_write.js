@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,12 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executeDbWrite = executeDbWrite;
 // src/tools/db_write.ts
 // =============================================================================
 // db_write tool handler
@@ -36,8 +29,8 @@ exports.executeDbWrite = executeDbWrite;
 // ADR-008: MCP server as the AI tool interface layer
 // ADR-009: Persona-based permissions as infrastructure
 // =============================================================================
-const db_js_1 = __importDefault(require("../db.js"));
-const persona_js_1 = require("../persona.js");
+import pool from '../db.js';
+import { logScopeViolation } from '../persona.js';
 // ----------------------------------------------------------------------------
 // Table allowlist
 // Core governance tables are explicitly excluded — they are written to
@@ -67,7 +60,7 @@ function checkDbWriteScope(persona, table) {
 // ----------------------------------------------------------------------------
 // executeDbWrite()
 // ----------------------------------------------------------------------------
-async function executeDbWrite(args, persona, sessionId) {
+export async function executeDbWrite(args, persona, sessionId) {
     const { table, record } = args;
     // Allowlist check — before scope check
     if (!ALLOWED_WRITE_TABLES.has(table)) {
@@ -81,7 +74,7 @@ async function executeDbWrite(args, persona, sessionId) {
     // Scope check
     const scopeError = checkDbWriteScope(persona, table);
     if (scopeError) {
-        await (0, persona_js_1.logScopeViolation)({
+        await logScopeViolation({
             personaId: args.persona_id,
             sessionId,
             attemptedAction: 'write',
@@ -126,7 +119,7 @@ async function executeDbWrite(args, persona, sessionId) {
     RETURNING *
   `;
     try {
-        const result = await db_js_1.default.query(query, values);
+        const result = await pool.query(query, values);
         return {
             content: [{ type: 'text', text: JSON.stringify({
                         table,
@@ -146,7 +139,7 @@ async function executeDbWrite(args, persona, sessionId) {
 // ----------------------------------------------------------------------------
 // ToolHandler export — consumed by the tool registry in index.ts
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'db_write',
         description: 'Write to the GIF Postgres database. Persona scope and output destinations are validated before execution.',

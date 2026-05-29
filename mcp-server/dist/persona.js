@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,12 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.logAuditRead = exports.verifyIdentityBinding = exports.logScopeViolation = exports.validatePersona = void 0;
 // Functions — delegated to pool-bound enforcement instance
-const enforcement_instance_js_1 = require("./enforcement_instance.js");
-exports.validatePersona = enforcement_instance_js_1.gif.validatePersona;
-exports.logScopeViolation = enforcement_instance_js_1.gif.logScopeViolation;
-exports.verifyIdentityBinding = enforcement_instance_js_1.gif.verifyIdentityBinding;
-exports.logAuditRead = enforcement_instance_js_1.gif.logAuditRead;
+import { gif } from './enforcement_instance.js';
+export const validatePersona = gif.validatePersona;
+export const logScopeViolation = gif.logScopeViolation;
+export const verifyIdentityBinding = gif.verifyIdentityBinding;
+export const logAuditRead = gif.logAuditRead;
 //# sourceMappingURL=persona.js.map

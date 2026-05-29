@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,12 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executePersonaRevoke = executePersonaRevoke;
 // src/tools/persona_revoke.ts
 // =============================================================================
 // persona_revoke tool handler
@@ -42,16 +35,16 @@ exports.executePersonaRevoke = executePersonaRevoke;
 // ADR-009: Persona-based permissions as infrastructure
 // ADR-017: Governance audit schema stubs
 // =============================================================================
-const db_js_1 = __importDefault(require("../db.js"));
-const persona_js_1 = require("../persona.js");
+import pool from '../db.js';
+import { logScopeViolation } from '../persona.js';
 // ----------------------------------------------------------------------------
 // executePersonaRevoke()
 // ----------------------------------------------------------------------------
-async function executePersonaRevoke(args, persona, sessionId) {
+export async function executePersonaRevoke(args, persona, sessionId) {
     // Scope check — issuer must have manage_personas
     const scope = persona.scope_definition;
     if (!scope.permitted_actions || !scope.permitted_actions.includes('manage_personas')) {
-        await (0, persona_js_1.logScopeViolation)({
+        await logScopeViolation({
             personaId: args.persona_id,
             sessionId,
             attemptedAction: 'manage_personas',
@@ -69,7 +62,7 @@ async function executePersonaRevoke(args, persona, sessionId) {
     // Fetch target persona to record previous status
     let previousStatus;
     try {
-        const targetResult = await db_js_1.default.query(`SELECT status FROM personas WHERE persona_id = $1 LIMIT 1`, [args.target_persona_id]);
+        const targetResult = await pool.query(`SELECT status FROM personas WHERE persona_id = $1 LIMIT 1`, [args.target_persona_id]);
         if (targetResult.rows.length === 0) {
             return {
                 content: [{ type: 'text', text: JSON.stringify({
@@ -99,17 +92,17 @@ async function executePersonaRevoke(args, persona, sessionId) {
     // Execute revocation in a transaction — status update, session close,
     // and revocation_log are atomic
     try {
-        await db_js_1.default.query('BEGIN');
-        await db_js_1.default.query(`UPDATE personas
+        await pool.query('BEGIN');
+        await pool.query(`UPDATE personas
        SET status = 'revoked', updated_at = now()
        WHERE persona_id = $1`, [args.target_persona_id]);
         // Close all open sessions for the revoked persona
-        const sessionResult = await db_js_1.default.query(`UPDATE sessions
+        const sessionResult = await pool.query(`UPDATE sessions
        SET ended_at = now()
        WHERE persona_id = $1 AND ended_at IS NULL
        RETURNING session_id`, [args.target_persona_id]);
         const sessionsTerminated = sessionResult.rowCount ?? 0;
-        await db_js_1.default.query(`INSERT INTO revocation_log (
+        await pool.query(`INSERT INTO revocation_log (
          persona_id,
          previous_status,
          new_status,
@@ -123,7 +116,7 @@ async function executePersonaRevoke(args, persona, sessionId) {
             args.revoked_by,
             sessionsTerminated,
         ]);
-        await db_js_1.default.query('COMMIT');
+        await pool.query('COMMIT');
         return {
             content: [{ type: 'text', text: JSON.stringify({
                         target_persona_id: args.target_persona_id,
@@ -137,7 +130,7 @@ async function executePersonaRevoke(args, persona, sessionId) {
         };
     }
     catch (err) {
-        await db_js_1.default.query('ROLLBACK');
+        await pool.query('ROLLBACK');
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona_revoke] Transaction failed:`, message);
         return {
@@ -151,7 +144,7 @@ async function executePersonaRevoke(args, persona, sessionId) {
 // Framework tool: ships with GIF enforcement engine (ADR-026).
 // Emits first-class persona_revoke audit event with source_ref = target persona_id.
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'persona_revoke',
         description: 'Revoke a persona immediately. Issuing persona must have manage_personas in permitted_actions.',

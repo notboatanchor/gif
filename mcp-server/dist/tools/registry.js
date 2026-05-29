@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,31 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.TOOL_REGISTRY = void 0;
 // GIF framework tools
-const persona_validate_js_1 = require("./persona_validate.js");
-const persona_create_js_1 = require("./persona_create.js");
-const persona_revoke_js_1 = require("./persona_revoke.js");
-const session_start_js_1 = require("./session_start.js");
-const session_close_js_1 = require("./session_close.js");
+import { handler as personaValidateHandler } from './persona_validate.js';
+import { handler as personaCreateHandler } from './persona_create.js';
+import { handler as personaRevokeHandler } from './persona_revoke.js';
+import { handler as sessionStartHandler } from './session_start.js';
+import { handler as sessionCloseHandler } from './session_close.js';
 // Reference implementation adopter tools
-const db_read_js_1 = require("./db_read.js");
-const db_write_js_1 = require("./db_write.js");
+import { handler as dbReadHandler } from './db_read.js';
+import { handler as dbWriteHandler } from './db_write.js';
 // ---------------------------------------------------------------------------
 // TOOL_REGISTRY
 // Map of tool name → ToolHandler. Add new handlers here.
 // Order is reflected in ListTools responses.
 // ---------------------------------------------------------------------------
-exports.TOOL_REGISTRY = new Map([
+export const TOOL_REGISTRY = new Map([
     // GIF framework tools
-    [persona_validate_js_1.handler.definition.name, persona_validate_js_1.handler],
-    [persona_create_js_1.handler.definition.name, persona_create_js_1.handler],
-    [persona_revoke_js_1.handler.definition.name, persona_revoke_js_1.handler],
-    [session_start_js_1.handler.definition.name, session_start_js_1.handler],
-    [session_close_js_1.handler.definition.name, session_close_js_1.handler],
+    [personaValidateHandler.definition.name, personaValidateHandler],
+    [personaCreateHandler.definition.name, personaCreateHandler],
+    [personaRevokeHandler.definition.name, personaRevokeHandler],
+    [sessionStartHandler.definition.name, sessionStartHandler],
+    [sessionCloseHandler.definition.name, sessionCloseHandler],
     // Adopter tools — reference implementation
-    [db_read_js_1.handler.definition.name, db_read_js_1.handler],
-    [db_write_js_1.handler.definition.name, db_write_js_1.handler],
+    [dbReadHandler.definition.name, dbReadHandler],
+    [dbWriteHandler.definition.name, dbWriteHandler],
 ]);
 //# sourceMappingURL=registry.js.map

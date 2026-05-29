@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,12 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executePersonaCreate = executePersonaCreate;
 // src/tools/persona_create.ts
 // =============================================================================
 // persona_create tool handler
@@ -52,8 +45,8 @@ exports.executePersonaCreate = executePersonaCreate;
 // ADR-009: Persona-based permissions as infrastructure
 // ADR-017: Governance audit schema stubs
 // =============================================================================
-const db_js_1 = __importDefault(require("../db.js"));
-const persona_js_1 = require("../persona.js");
+import pool from '../db.js';
+import { logScopeViolation, verifyIdentityBinding } from '../persona.js';
 // ----------------------------------------------------------------------------
 // scopeIsSubset()
 // Returns null if child scope is valid (subset of parent scope).
@@ -87,11 +80,11 @@ function scopeIsSubset(childScope, parentScope) {
 // ----------------------------------------------------------------------------
 // executePersonaCreate()
 // ----------------------------------------------------------------------------
-async function executePersonaCreate(args, persona, sessionId) {
+export async function executePersonaCreate(args, persona, sessionId) {
     // Scope check — issuer must have manage_personas
     const scope = persona.scope_definition;
     if (!scope.permitted_actions || !scope.permitted_actions.includes('manage_personas')) {
-        await (0, persona_js_1.logScopeViolation)({
+        await logScopeViolation({
             personaId: args.persona_id,
             sessionId,
             attemptedAction: 'manage_personas',
@@ -128,7 +121,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         // Fetch parent persona scope and delegation constraints
         let parentPersona = null;
         try {
-            const parentResult = await db_js_1.default.query(`SELECT scope_definition, max_delegation_depth
+            const parentResult = await pool.query(`SELECT scope_definition, max_delegation_depth
          FROM personas
          WHERE persona_id = $1 AND status = 'active'
          LIMIT 1`, [args.parent_persona_id]);
@@ -152,7 +145,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         }
         // Determine parent's current depth in the chain (0 if root)
         try {
-            const depthResult = await db_js_1.default.query(`SELECT delegation_depth
+            const depthResult = await pool.query(`SELECT delegation_depth
          FROM delegation_chain
          WHERE child_persona_id = $1
          ORDER BY delegated_at DESC
@@ -170,7 +163,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         }
         // Check delegation depth does not exceed parent's max_delegation_depth
         if (delegationDepth > parentPersona.max_delegation_depth) {
-            await (0, persona_js_1.logScopeViolation)({
+            await logScopeViolation({
                 personaId: args.persona_id,
                 sessionId,
                 attemptedAction: 'delegate_persona',
@@ -192,7 +185,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         // Check child scope is a subset of parent scope
         const violation = scopeIsSubset(parsedScope, parentPersona.scope_definition);
         if (violation) {
-            await (0, persona_js_1.logScopeViolation)({
+            await logScopeViolation({
                 personaId: args.persona_id,
                 sessionId,
                 attemptedAction: 'delegate_persona',
@@ -229,7 +222,7 @@ async function executePersonaCreate(args, persona, sessionId) {
             isError: true,
         };
     }
-    const binding = await (0, persona_js_1.verifyIdentityBinding)({ identityToken: args.identity_token });
+    const binding = await verifyIdentityBinding({ identityToken: args.identity_token });
     if (!binding.valid) {
         return {
             content: [{ type: 'text', text: JSON.stringify({
@@ -243,8 +236,8 @@ async function executePersonaCreate(args, persona, sessionId) {
     // Insert persona (and delegation_chain record if delegated) — atomic
     // ---------------------------------------------------------------------------
     try {
-        await db_js_1.default.query('BEGIN');
-        const result = await db_js_1.default.query(`INSERT INTO personas (
+        await pool.query('BEGIN');
+        const result = await pool.query(`INSERT INTO personas (
          issuing_entity,
          purpose,
          created_by,
@@ -266,7 +259,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         ]);
         const newPersonaId = result.rows[0].persona_id;
         if (args.parent_persona_id) {
-            await db_js_1.default.query(`INSERT INTO delegation_chain (
+            await pool.query(`INSERT INTO delegation_chain (
            parent_persona_id,
            child_persona_id,
            delegated_permissions,
@@ -280,7 +273,7 @@ async function executePersonaCreate(args, persona, sessionId) {
                 args.created_by,
             ]);
         }
-        await db_js_1.default.query('COMMIT');
+        await pool.query('COMMIT');
         return {
             content: [{ type: 'text', text: JSON.stringify({
                         persona_id: newPersonaId,
@@ -296,7 +289,7 @@ async function executePersonaCreate(args, persona, sessionId) {
         };
     }
     catch (err) {
-        await db_js_1.default.query('ROLLBACK');
+        await pool.query('ROLLBACK');
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona_create] Transaction failed:`, message);
         return {
@@ -310,7 +303,7 @@ async function executePersonaCreate(args, persona, sessionId) {
 // Framework tool: ships with GIF enforcement engine (ADR-026).
 // Emits first-class persona_create audit event with source_ref = new persona_id.
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'persona_create',
         description: 'Create a new persona in the GIF registry. Issuing persona must have manage_personas in permitted_actions.',

@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
 // src/db.ts
 // =============================================================================
 // Postgres connection pool
@@ -25,10 +23,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Accepts either PG* (libpq canonical) or POSTGRES_* (common in compose stubs).
 // PG* takes precedence when both are set.
 // =============================================================================
-const pg_1 = require("pg");
+import { Pool } from 'pg';
 // Single pool instance shared across the process.
 // pg manages connection lifecycle — do not create per-request pools.
-const pool = new pg_1.Pool({
+const pool = new Pool({
     host: process.env.PGHOST || process.env.POSTGRES_HOST || 'localhost',
     port: parseInt(process.env.PGPORT || process.env.POSTGRES_PORT || '5432'),
     user: process.env.PGUSER || process.env.POSTGRES_USER || 'gif_app',
@@ -46,5 +44,5 @@ const pool = new pg_1.Pool({
 pool.on('error', (err) => {
     console.error('[db] Unexpected pool error:', err.message);
 });
-exports.default = pool;
+export default pool;
 //# sourceMappingURL=db.js.map

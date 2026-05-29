@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateSessionHandle = exports.logAuditEvent = exports.closeSession = exports.createSession = void 0;
 // src/session.ts
 // =============================================================================
 // Session management — re-export shim (ADR-027)
@@ -27,9 +24,9 @@ exports.validateSessionHandle = exports.logAuditEvent = exports.closeSession = e
 // All session/audit logic lives in enforcement.ts — this file is a stable
 // import surface, not an implementation.
 // =============================================================================
-const enforcement_instance_js_1 = require("./enforcement_instance.js");
-exports.createSession = enforcement_instance_js_1.gif.createSession;
-exports.closeSession = enforcement_instance_js_1.gif.closeSession;
-exports.logAuditEvent = enforcement_instance_js_1.gif.logAuditEvent;
-exports.validateSessionHandle = enforcement_instance_js_1.gif.validateSessionHandle;
+import { gif } from './enforcement_instance.js';
+export const createSession = gif.createSession;
+export const closeSession = gif.closeSession;
+export const logAuditEvent = gif.logAuditEvent;
+export const validateSessionHandle = gif.validateSessionHandle;
 //# sourceMappingURL=session.js.map

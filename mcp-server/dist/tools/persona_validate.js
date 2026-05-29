@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,16 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executePersonaValidate = executePersonaValidate;
 // ----------------------------------------------------------------------------
 // executePersonaValidate()
 // Called only after the enforcement engine has already validated the persona.
 // Returns the persona details in a consistent format.
 // ----------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/require-await -- ToolHandler.execute must return Promise<ToolResult>; this implementation is synchronous but the interface contract requires async.
-async function executePersonaValidate(_args, persona, _sessionId) {
+export async function executePersonaValidate(_args, persona, _sessionId) {
     return {
         content: [{
                 type: 'text',
@@ -45,7 +41,7 @@ async function executePersonaValidate(_args, persona, _sessionId) {
 // Framework tool: ships with GIF enforcement engine (ADR-026).
 // skipSession: true — persona is validated but no session is created.
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'persona_validate',
         description: 'Validate a persona by ID. Returns persona details if valid, error if not. Diagnostic — does not create a session.',

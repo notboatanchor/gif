@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,12 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executeSessionClose = executeSessionClose;
 // src/tools/session_close.ts
 // =============================================================================
 // session_close tool handler (GIF-020)
@@ -40,18 +33,18 @@ exports.executeSessionClose = executeSessionClose;
 // GIF-020: closure semantics
 // GIF-022 C3.1–C3.5: conformance MUSTs for session_close
 // =============================================================================
-const db_js_1 = __importDefault(require("../db.js"));
-const session_js_1 = require("../session.js");
+import pool from '../db.js';
+import { logAuditEvent } from '../session.js';
 // ----------------------------------------------------------------------------
 // executeSessionClose()
 // ----------------------------------------------------------------------------
-async function executeSessionClose(args, persona, _sessionId) {
+export async function executeSessionClose(args, persona, _sessionId) {
     const { persona_id, gif_session_id } = args;
     // Look up the session row to validate ownership and current state.
     let rejection = null;
     let auditSessionId = null;
     try {
-        const result = await db_js_1.default.query(`SELECT persona_id, ended_at
+        const result = await pool.query(`SELECT persona_id, ended_at
        FROM sessions
        WHERE session_id = $1
        LIMIT 1`, [gif_session_id]);
@@ -81,7 +74,7 @@ async function executeSessionClose(args, persona, _sessionId) {
         };
     }
     if (rejection) {
-        await (0, session_js_1.logAuditEvent)({
+        await logAuditEvent({
             personaId: persona_id,
             sessionId: auditSessionId,
             eventType: 'session_rejected_closed',
@@ -103,7 +96,7 @@ async function executeSessionClose(args, persona, _sessionId) {
     // best-effort (audit-never-throws), but it is sequenced after the UPDATE
     // so the typical success path records both.
     try {
-        await db_js_1.default.query(`UPDATE sessions SET ended_at = now() WHERE session_id = $1`, [gif_session_id]);
+        await pool.query(`UPDATE sessions SET ended_at = now() WHERE session_id = $1`, [gif_session_id]);
     }
     catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
@@ -115,7 +108,7 @@ async function executeSessionClose(args, persona, _sessionId) {
             isError: true,
         };
     }
-    await (0, session_js_1.logAuditEvent)({
+    await logAuditEvent({
         personaId: persona_id,
         sessionId: gif_session_id,
         eventType: 'session_close',
@@ -135,7 +128,7 @@ async function executeSessionClose(args, persona, _sessionId) {
 // Framework tool: ships with GIF enforcement engine.
 // skipSession: true — handler operates on a caller-supplied handle.
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'session_close',
         description: 'Explicitly close a v0.2 governance session. Validates persona ownership, sets sessions.ended_at, and emits a session_close audit event. Per GIF-020.',

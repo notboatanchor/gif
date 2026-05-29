@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createEnforcement = createEnforcement;
 // src/enforcement.ts
 // =============================================================================
 // GIF enforcement module — adopter import point (ADR-027 Stage 1)
@@ -39,13 +36,13 @@ exports.createEnforcement = createEnforcement;
 // ADR-027: Stage 1 — code-level extraction before physical repo split
 // ADR-028: Per-adopter application credentials injected at construction time
 // =============================================================================
-const crypto_1 = require("crypto");
+import { createHmac, timingSafeEqual } from 'crypto';
 // ---------------------------------------------------------------------------
 // createEnforcement()
 // Factory that returns enforcement functions bound to the provided pool.
 // Call once at MCP server startup with the application's DB pool.
 // ---------------------------------------------------------------------------
-function createEnforcement(pool) {
+export function createEnforcement(pool) {
     return {
         validatePersona: (personaId) => _validatePersona(pool, personaId),
         createSession: (params) => _createSession(pool, params),
@@ -337,11 +334,11 @@ async function _verifyIdentityBinding(pool, params) {
         console.error('[gif-enforcement] IDENTITY_HMAC_SECRET is not set — identity binding unavailable');
         return { valid: false, reason: 'IDENTITY_HMAC_SECRET not configured on server' };
     }
-    const expectedHmac = (0, crypto_1.createHmac)('sha256', secret).update(payloadB64).digest('hex');
+    const expectedHmac = createHmac('sha256', secret).update(payloadB64).digest('hex');
     // Pad to equal length for timingSafeEqual
     const expectedBuf = Buffer.from(expectedHmac, 'hex');
     const providedBuf = Buffer.from(providedHmac.padEnd(expectedHmac.length, '0'), 'hex');
-    if (expectedBuf.length !== providedBuf.length || !(0, crypto_1.timingSafeEqual)(expectedBuf, providedBuf)) {
+    if (expectedBuf.length !== providedBuf.length || !timingSafeEqual(expectedBuf, providedBuf)) {
         return { valid: false, reason: 'Invalid token signature' };
     }
     // Step 3: Decode and validate payload

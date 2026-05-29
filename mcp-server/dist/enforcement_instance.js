@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,11 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.gif = void 0;
 // src/enforcement_instance.ts
 // =============================================================================
 // Module-level enforcement instance for the GIF MCP server.
@@ -30,7 +24,7 @@ exports.gif = void 0;
 // ADR-027: enforcement.ts is the canonical implementation; this file
 // ensures the GIF server itself uses it rather than duplicating the logic.
 // =============================================================================
-const db_js_1 = __importDefault(require("./db.js"));
-const enforcement_js_1 = require("./enforcement.js");
-exports.gif = (0, enforcement_js_1.createEnforcement)(db_js_1.default);
+import pool from './db.js';
+import { createEnforcement } from './enforcement.js';
+export const gif = createEnforcement(pool);
 //# sourceMappingURL=enforcement_instance.js.map

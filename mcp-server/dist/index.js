@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,10 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
 // src/index.ts
 // =============================================================================
 // GIF MCP server — entry point
@@ -51,14 +46,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // GIF-020: Session closure semantics (caller-close + hard TTL)
 // GIF-022: v0.2 conformance surface
 // =============================================================================
-const node_crypto_1 = require("node:crypto");
-const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
-const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
-const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
-const http_1 = __importDefault(require("http"));
-const persona_js_1 = require("./persona.js");
-const session_js_1 = require("./session.js");
-const registry_js_1 = require("./tools/registry.js");
+import { randomUUID } from 'node:crypto';
+import { Server, ProtocolError, ProtocolErrorCode, isInitializeRequest } from '@modelcontextprotocol/server';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import http from 'http';
+import { validatePersona } from './persona.js';
+import { logAuditEvent, validateSessionHandle } from './session.js';
+import { TOOL_REGISTRY } from './tools/registry.js';
 const PORT = parseInt(process.env.PORT || '3100');
 // GIF_SESSION_TTL_SECONDS — deployment-wide hard TTL for governance sessions
 // (GIF-020). Read once at startup. Default 86400 (24 hours).
@@ -74,32 +68,32 @@ if (!Number.isFinite(GIF_SESSION_TTL_SECONDS) || GIF_SESSION_TTL_SECONDS <= 0) {
 // ----------------------------------------------------------------------------
 function createServer() {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- low-level API required for registry-driven dispatch
-    const server = new index_js_1.Server({ name: 'gif-mcp-server', version: '0.1.0' }, { capabilities: { tools: {} } });
+    const server = new Server({ name: 'gif-mcp-server', version: '0.1.0' }, { capabilities: { tools: {} } });
     // --------------------------------------------------------------------------
     // ListTools — derived from registry, no hardcoded definitions
     // --------------------------------------------------------------------------
-    server.setRequestHandler(types_js_1.ListToolsRequestSchema, () => ({
-        tools: Array.from(registry_js_1.TOOL_REGISTRY.values()).map(h => h.definition),
+    server.setRequestHandler('tools/list', () => ({
+        tools: Array.from(TOOL_REGISTRY.values()).map(h => h.definition),
     }));
     // --------------------------------------------------------------------------
     // CallTool — enforcement engine + registry dispatch
     // Session lifecycle managed here — wraps all tool executions.
     // --------------------------------------------------------------------------
-    server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
+    server.setRequestHandler('tools/call', async (request) => {
         const { name, arguments: args } = request.params;
         if (!args || typeof args !== 'object') {
-            throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, 'Tool arguments are required');
+            throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Tool arguments are required');
         }
         const persona_id = args['persona_id'];
         if (!persona_id) {
-            throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, 'persona_id is required for all tool calls');
+            throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'persona_id is required for all tool calls');
         }
-        const toolHandler = registry_js_1.TOOL_REGISTRY.get(name);
+        const toolHandler = TOOL_REGISTRY.get(name);
         if (!toolHandler) {
-            throw new types_js_1.McpError(types_js_1.ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+            throw new ProtocolError(ProtocolErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
         // Validate persona — always, regardless of skipSession
-        const validation = await (0, persona_js_1.validatePersona)(persona_id);
+        const validation = await validatePersona(persona_id);
         if (!validation.valid) {
             return {
                 content: [{ type: 'text', text: JSON.stringify({ valid: false, reason: validation.reason, message: validation.message }) }],
@@ -116,9 +110,9 @@ function createServer() {
         // Governed tools — validate the caller-supplied gif_session_id (GIF-020).
         const gif_session_id = args['gif_session_id'];
         if (!gif_session_id) {
-            throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, 'gif_session_id is required for governed tools — call session_start first');
+            throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'gif_session_id is required for governed tools — call session_start first');
         }
-        const sessionCheck = await (0, session_js_1.validateSessionHandle)({
+        const sessionCheck = await validateSessionHandle({
             personaId: persona_id,
             gifSessionId: gif_session_id,
             ttlSeconds: GIF_SESSION_TTL_SECONDS,
@@ -133,7 +127,7 @@ function createServer() {
                 const eventType = sessionCheck.reason === 'SESSION_EXPIRED'
                     ? 'session_expired'
                     : 'session_rejected_closed';
-                await (0, session_js_1.logAuditEvent)({
+                await logAuditEvent({
                     personaId: persona_id,
                     sessionId: sessionCheck.auditSessionId,
                     eventType,
@@ -170,7 +164,7 @@ function createServer() {
                 sourceRef = meta.sourceRef;
                 humanActorId = meta.humanActorId;
             }
-            await (0, session_js_1.logAuditEvent)({
+            await logAuditEvent({
                 personaId: persona_id,
                 sessionId,
                 eventType,
@@ -240,10 +234,10 @@ async function handleRequest(req, res) {
                 await transport.handleRequest(req, res, body);
                 return;
             }
-            if (!sessionId && (0, types_js_1.isInitializeRequest)(body)) {
+            if (!sessionId && isInitializeRequest(body)) {
                 // New session initialization
-                const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
-                    sessionIdGenerator: () => (0, node_crypto_1.randomUUID)(),
+                const transport = new NodeStreamableHTTPServerTransport({
+                    sessionIdGenerator: () => randomUUID(),
                     onsessioninitialized: (sid) => {
                         transports.set(sid, transport);
                         console.log(`[server] Session opened: ${sid}`);
@@ -290,7 +284,7 @@ async function handleRequest(req, res) {
 // ----------------------------------------------------------------------------
 // HTTP server
 // ----------------------------------------------------------------------------
-const httpServer = http_1.default.createServer((req, res) => {
+const httpServer = http.createServer((req, res) => {
     handleRequest(req, res).catch((err) => {
         console.error('[server] Unhandled request error:', err);
         if (!res.headersSent) {
@@ -303,7 +297,7 @@ httpServer.listen(PORT, () => {
     console.log(`[server] GIF MCP server running on port ${String(PORT)}`);
     console.log(`[server] Health: http://localhost:${String(PORT)}/health`);
     console.log(`[server] MCP:    http://localhost:${String(PORT)}/mcp`);
-    console.log(`[server] Tools registered: ${Array.from(registry_js_1.TOOL_REGISTRY.keys()).join(', ')}`);
+    console.log(`[server] Tools registered: ${Array.from(TOOL_REGISTRY.keys()).join(', ')}`);
     console.log(`[server] GIF_SESSION_TTL_SECONDS=${String(GIF_SESSION_TTL_SECONDS)}`);
 });
 process.on('SIGTERM', () => {

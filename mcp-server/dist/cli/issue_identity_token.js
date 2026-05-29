@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
 // src/cli/issue_identity_token.ts
 // =============================================================================
 // Admin CLI: generate a one-time HMAC-signed identity token for persona_create.
@@ -38,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 //
 // Sprint 5: Compliance Hardening — identity binding (ADR-021)
 // =============================================================================
-const crypto_1 = require("crypto");
+import { createHmac } from 'crypto';
 // ---------------------------------------------------------------------------
 // Token generation
 // ---------------------------------------------------------------------------
@@ -52,7 +50,7 @@ function issueToken(assignmentId) {
         assignment_id: assignmentId,
         issued_at: new Date().toISOString(),
     })).toString('base64url');
-    const hmac = (0, crypto_1.createHmac)('sha256', secret).update(payload).digest('hex');
+    const hmac = createHmac('sha256', secret).update(payload).digest('hex');
     return `${payload}.${hmac}`;
 }
 // ---------------------------------------------------------------------------

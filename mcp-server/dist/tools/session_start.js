@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,9 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executeSessionStart = executeSessionStart;
 // src/tools/session_start.ts
 // =============================================================================
 // session_start tool handler (GIF-019)
@@ -36,24 +32,24 @@ exports.executeSessionStart = executeSessionStart;
 // GIF-019: handle mint point and propagation channel
 // GIF-022 C1.1–C1.6: conformance MUSTs for session_start
 // =============================================================================
-const session_js_1 = require("../session.js");
+import { createSession, logAuditEvent } from '../session.js';
 // ----------------------------------------------------------------------------
 // executeSessionStart()
 // ----------------------------------------------------------------------------
-async function executeSessionStart(args, persona, _sessionId) {
+export async function executeSessionStart(args, persona, _sessionId) {
     const invocationContext = {
         minted_by: 'session_start',
         persona_purpose: persona.purpose,
         persona_valid_until: persona.valid_until,
         ...(args.invocation_context ?? {}),
     };
-    const newSessionId = await (0, session_js_1.createSession)({
+    const newSessionId = await createSession({
         personaId: args.persona_id,
         invocationContext,
     });
     // C1.5: exactly one session_start audit event linked to the new session_id.
     // Best-effort per audit-never-throws — logAuditEvent catches internally.
-    await (0, session_js_1.logAuditEvent)({
+    await logAuditEvent({
         personaId: args.persona_id,
         sessionId: newSessionId,
         eventType: 'session_start',
@@ -72,7 +68,7 @@ async function executeSessionStart(args, persona, _sessionId) {
 // Framework tool: ships with GIF enforcement engine.
 // skipSession: true — handler mints its own governance session.
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'session_start',
         description: 'Mint a v0.2 governance session handle (gif_session_id). Returns the handle that subsequent governed tool calls must include in their args. Per GIF-019.',

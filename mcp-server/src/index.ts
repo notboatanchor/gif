@@ -49,15 +49,8 @@
 // =============================================================================
 
 import { randomUUID } from 'node:crypto';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-  ErrorCode,
-  McpError,
-  isInitializeRequest,
-} from '@modelcontextprotocol/sdk/types.js';
+import { Server, ProtocolError, ProtocolErrorCode, isInitializeRequest } from '@modelcontextprotocol/server';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import http from 'http';
 import { validatePersona } from './persona.js';
 import { logAuditEvent, validateSessionHandle } from './session.js';
@@ -90,7 +83,7 @@ function createServer() {
   // ListTools — derived from registry, no hardcoded definitions
   // --------------------------------------------------------------------------
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({
+  server.setRequestHandler('tools/list', () => ({
     tools: Array.from(TOOL_REGISTRY.values()).map(h => h.definition),
   }));
 
@@ -99,22 +92,22 @@ function createServer() {
   // Session lifecycle managed here — wraps all tool executions.
   // --------------------------------------------------------------------------
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler('tools/call', async (request) => {
     const { name, arguments: args } = request.params;
 
     if (!args || typeof args !== 'object') {
-      throw new McpError(ErrorCode.InvalidParams, 'Tool arguments are required');
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Tool arguments are required');
     }
 
     const persona_id = args['persona_id'] as string | undefined;
 
     if (!persona_id) {
-      throw new McpError(ErrorCode.InvalidParams, 'persona_id is required for all tool calls');
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'persona_id is required for all tool calls');
     }
 
     const toolHandler = TOOL_REGISTRY.get(name);
     if (!toolHandler) {
-      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+      throw new ProtocolError(ProtocolErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
 
     // Validate persona — always, regardless of skipSession
@@ -137,8 +130,8 @@ function createServer() {
     // Governed tools — validate the caller-supplied gif_session_id (GIF-020).
     const gif_session_id = args['gif_session_id'] as string | undefined;
     if (!gif_session_id) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
         'gif_session_id is required for governed tools — call session_start first',
       );
     }
@@ -223,7 +216,7 @@ function createServer() {
 // Active Streamable HTTP transports — keyed by MCP session ID
 // ----------------------------------------------------------------------------
 
-const transports = new Map<string, StreamableHTTPServerTransport>();
+const transports = new Map<string, NodeStreamableHTTPServerTransport>();
 
 // ----------------------------------------------------------------------------
 // Body parsing — required for raw Node.js HTTP (no framework body parser)
@@ -283,7 +276,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
       if (!sessionId && isInitializeRequest(body)) {
         // New session initialization
-        const transport = new StreamableHTTPServerTransport({
+        const transport = new NodeStreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             transports.set(sid, transport);

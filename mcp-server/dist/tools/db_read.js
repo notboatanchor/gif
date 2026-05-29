@@ -1,4 +1,3 @@
-"use strict";
 /*
  * Copyright 2026 Notboatanchor Labs LLC
  *
@@ -14,12 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.handler = void 0;
-exports.executeDbRead = executeDbRead;
 // src/tools/db_read.ts
 // =============================================================================
 // db_read tool handler
@@ -35,8 +28,8 @@ exports.executeDbRead = executeDbRead;
 // ADR-008: MCP server as the AI tool interface layer
 // ADR-009: Persona-based permissions as infrastructure
 // =============================================================================
-const db_js_1 = __importDefault(require("../db.js"));
-const persona_js_1 = require("../persona.js");
+import pool from '../db.js';
+import { logScopeViolation, logAuditRead } from '../persona.js';
 // ----------------------------------------------------------------------------
 // Table allowlist
 // Only these tables may be queried via db_read regardless of persona scope.
@@ -89,7 +82,7 @@ function checkDbReadScope(persona, table) {
 // ----------------------------------------------------------------------------
 // executeDbRead()
 // ----------------------------------------------------------------------------
-async function executeDbRead(args, persona, sessionId) {
+export async function executeDbRead(args, persona, sessionId) {
     const { table, filters, limit } = args;
     // Allowlist check — before scope check to avoid leaking table names
     if (!ALLOWED_READ_TABLES.has(table) && !ADMIN_READ_TABLES.has(table)) {
@@ -103,7 +96,7 @@ async function executeDbRead(args, persona, sessionId) {
     // Scope check
     const scopeError = checkDbReadScope(persona, table);
     if (scopeError) {
-        await (0, persona_js_1.logScopeViolation)({
+        await logScopeViolation({
             personaId: args.persona_id,
             sessionId,
             attemptedAction: 'read',
@@ -144,11 +137,11 @@ async function executeDbRead(args, persona, sessionId) {
     const limitParam = `$${String(filterValues.length + 1)}`;
     const query = `SELECT * FROM "${table}" ${whereString} LIMIT ${limitParam}`;
     try {
-        const result = await db_js_1.default.query(query, [...filterValues, limit]);
+        const result = await pool.query(query, [...filterValues, limit]);
         // Log reads against audit-class tables for chain-of-custody (Sprint 5).
         // Fire-and-forget: failure must not mask the read response.
         if (AUDIT_CLASS_TABLES.has(table)) {
-            void (0, persona_js_1.logAuditRead)({
+            void logAuditRead({
                 readerPersonaId: persona.persona_id,
                 readerSessionId: sessionId,
                 queriedTable: table,
@@ -177,7 +170,7 @@ async function executeDbRead(args, persona, sessionId) {
 // ----------------------------------------------------------------------------
 // ToolHandler export — consumed by the tool registry in index.ts
 // ----------------------------------------------------------------------------
-exports.handler = {
+export const handler = {
     definition: {
         name: 'db_read',
         description: 'Read from the GIF Postgres database. Persona scope is validated before execution.',
