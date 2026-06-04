@@ -26,3 +26,13 @@ Persona-scoped audit data enables process flow documentation by role across all 
 ## Consequences
 
 `audit_events` is the authoritative governance record. Compliance reporting, behavioral analysis, and regulatory audit all build from this table. Adopters must not grant UPDATE or DELETE on audit tables to application users. The schema migration that creates `audit_events` and its partitions must include the INSERT-only permission grants as a non-optional step.
+
+## Update — canonical-form hash alignment (2026-06-04, migration 014)
+
+The infrastructure-level tamper evidence flagged as roadmap above is now implemented in a vendor-neutral, tamper-evident audit-record canonical form:
+
+- **Hash chain.** Migration 006 added a `BEFORE INSERT` trigger that computes `event_hash = sha256(preimage)` with `previous_hash` linking each row to the prior row in its month partition (`SECURITY DEFINER`, owned by `gif_admin`, never-throws). Migration 014 changes only *how the preimage is computed*: from a pipe-delimited string to a **sorted-key JSON canonical form (`gif-audit/1`)**. A freshly inserted row's `event_hash` is byte-identical to the vendor-neutral reference vectors and to a plain `sha256sum` of the same canonical record.
+- **`purpose_declared` is now in the hashed preimage.** A privileged writer can no longer rewrite the declared governance reason for an action without breaking the chain — this closes a real integrity gap (the declared *why* is now tamper-evident, not just the *what*).
+- **Canonical key mapping (no column renames).** The stored column `persona_id` maps to the canonical key `principal_id`; `invoked_by_persona_id` → `invoked_by_principal_id`. gif implements the `caller-governance` profile. Timestamps are millisecond RFC 3339 UTC (`…Z`).
+- **Verification.** The read-only operator CLI `mcp-server/src/cli/verify_audit_chain.ts` recomputes and re-links the chain (and checks external anchors with `--check-anchors`). `canon_version` (`gif-audit/1`) is stamped per row; the verifier branches on it for forward-safety — a row written under a future canonical form is reported as *uncheckable*, never as tamper.
+- **Normalization parity caveat.** Protected string fields are NFC-normalized and trimmed identically by the trigger and the verifier. The verifier additionally rejects control characters / over-length strings (per the canonical-form canonicalizer); the trigger does NFC + trim only, because audit logging must never throw (see above). For gif's controlled-vocabulary / `persona.purpose` inputs the two agree byte-for-byte; a value that trips the verifier's stricter check is surfaced as *uncheckable*, not tamper.

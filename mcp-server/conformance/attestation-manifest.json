@@ -1,0 +1,6 @@
+{
+  "storage_mechanism": "revoked-dml-rls",
+  "chain_algorithm": "sha-256",
+  "canonical_form_version": "gif-audit/1",
+  "verification_procedure_ref": "mcp-server/src/cli/verify_audit_chain.ts"
+}

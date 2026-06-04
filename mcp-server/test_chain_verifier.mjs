@@ -61,29 +61,68 @@ function fail(label, detail) {
 
 // ---------------------------------------------------------------------------
 // Pure functions — replicated from verify_audit_chain.ts for plain-node
-// testability (no build step needed). Must stay byte-identical to the trigger's
-// preimage contract and to the .ts implementation.
+// testability (no build step needed). The verifier's CLI entry runs at module
+// top level (opens a Pool, calls process.exit), so it cannot be imported here;
+// these MUST stay byte-identical to the .ts implementation and to the DB
+// trigger (migration 014). The known-answer test below guards this replica
+// against silent drift from the canonical form (gif-audit/1).
 //
-// Preimage: concat_ws('|') with COALESCE on session_id, tool_name, previous_hash.
-// All non-nullable fields are their Postgres ::text values.
+// Canonical form: sorted-key JSON. See verify_audit_chain.ts and the
+// vendor-neutral reference vectors.
 // ---------------------------------------------------------------------------
 
-function buildPreimage(row, storedPreviousHash) {
-  return [
-    row.event_id,
-    row.occurred_at,
-    row.persona_id,
-    row.session_id   ?? 'NULL',
-    row.event_type,
-    row.tool_name    ?? 'NULL',
-    row.outcome,
-    row.flagged,
-    storedPreviousHash ?? 'NULL',
-  ].join('|');
+const MAX_FIELD_LEN = 8192;
+
+function normalizeString(s) {
+  if (/[\u0000-\u001f\u007f]/.test(s)) {
+    throw new Error('control character in protected string field');
+  }
+  const n = s.normalize('NFC').trim();
+  if (n.length > MAX_FIELD_LEN) {
+    throw new Error('protected string field exceeds length cap');
+  }
+  return n;
+}
+
+function canonicalize(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('non-finite number');
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string') return JSON.stringify(normalizeString(value));
+  if (Array.isArray(value)) return '[' + value.map(canonicalize).join(',') + ']';
+  if (typeof value === 'object') {
+    const obj = value;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
+  }
+  throw new Error(`uncanonicalizable value of type ${typeof value}`);
+}
+
+function buildBody(row, previousHash) {
+  return {
+    event_id:      row.event_id,
+    event_type:    row.event_type,
+    occurred_at:   row.occurred_at,
+    outcome:       row.outcome,
+    previous_hash: previousHash,
+    principal_id:  row.persona_id,
+    profile:       'caller-governance',
+    profile_data: {
+      flagged:                 row.flagged,
+      invoked_by_principal_id: row.invoked_by_persona_id ?? null,
+      purpose_declared:        row.purpose_declared ?? null,
+      session_id:              row.session_id,
+    },
+    tool_name:     row.tool_name,
+  };
 }
 
 function recomputeHash(row) {
-  const preimage = buildPreimage(row, row.previous_hash);
+  if (row.canon_version !== 'gif-audit/1') return null;
+  const preimage = canonicalize(buildBody(row, row.previous_hash));
   return crypto.createHash('sha256').update(preimage, 'utf8').digest('hex');
 }
 
@@ -97,6 +136,7 @@ function verifyPartition(partitionKey, rows) {
     mismatches:      [],
     breaks:          [],
     hash_errors:     [],
+    uncheckable:     [],
     legacy_null:     0,
   };
 
@@ -119,9 +159,23 @@ function verifyPartition(partitionKey, rows) {
       continue;
     }
 
+    // Unrecognized canon_version (null) or normalization rejection (throw) →
+    // uncheckable, never tamper (forward-safety).
+    let expected;
+    try {
+      expected = recomputeHash(row);
+    } catch {
+      expected = null;
+    }
+    if (expected === null) {
+      result.uncheckable.push(row.event_id);
+      prevHashedHash = row.event_hash;
+      isFirstHashed  = false;
+      continue;
+    }
+
     result.hashed_checked++;
 
-    const expected = recomputeHash(row);
     if (expected !== row.event_hash) {
       result.mismatches.push(row.event_id);
       prevHashedHash = row.event_hash;
@@ -179,6 +233,7 @@ function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLookup) {
   const total_mismatches   = partitions.reduce((s, p) => s + p.mismatches.length, 0);
   const total_breaks       = partitions.reduce((s, p) => s + p.breaks.length, 0);
   const total_hash_errors  = partitions.reduce((s, p) => s + p.hash_errors.length, 0);
+  const total_uncheckable  = partitions.reduce((s, p) => s + p.uncheckable.length, 0);
   const total_anchor_fails = anchorResults
     ? anchorResults.filter(a => a.status !== 'ok').length
     : 0;
@@ -189,6 +244,7 @@ function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLookup) {
     total_mismatches,
     total_breaks,
     total_hash_errors,
+    total_uncheckable,
     total_anchor_fails,
     ok: total_mismatches === 0 && total_breaks === 0 && total_anchor_fails === 0,
   };
@@ -197,9 +253,11 @@ function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLookup) {
 // ---------------------------------------------------------------------------
 // Synthetic chain builder — produces rows with correct hashes without a DB.
 //
-// Simulates exactly what the Postgres trigger does: for each row, compute
-// the SHA-256 of the preimage using the previous row's event_hash as
-// previous_hash. Fields are pre-cast string values, matching ::text output.
+// Simulates exactly what the Postgres trigger does: for each row, compute the
+// SHA-256 of the gif-audit/1 canonical preimage using the previous row's event_hash
+// as previous_hash. Fields are shaped as the verifier fetches them: occurred_at
+// is the millisecond-RFC3339 UTC 'Z' string, flagged is a real boolean, and
+// canon_version is 'gif-audit/1'.
 //
 // All UUIDs are deterministic fakes for reproducibility.
 // ---------------------------------------------------------------------------
@@ -209,26 +267,24 @@ const SESSION_ID = '00000000-0000-0000-0000-000000000002';
 
 function makeSyntheticRow(overrides, prevEventHash) {
   const base = {
-    event_id:      crypto.randomUUID(),
-    occurred_at:   '2026-06-03 10:00:00+00',
-    persona_id:    PERSONA_ID,
-    session_id:    SESSION_ID,
-    event_type:    'tool_call',
-    tool_name:     'test_tool',
-    outcome:       'success',
-    flagged:       'false',
+    event_id:              crypto.randomUUID(),
+    occurred_at:           '2026-06-03T10:00:00.000Z',
+    persona_id:            PERSONA_ID,
+    session_id:            SESSION_ID,
+    event_type:            'tool_call',
+    tool_name:             'test_tool',
+    outcome:               'success',
+    flagged:               false,
+    purpose_declared:      'synthetic test',
+    invoked_by_persona_id: null,
+    canon_version:         'gif-audit/1',
     ...overrides,
   };
 
-  // Compute the hash the trigger would compute.
-  const preimage = buildPreimage(base, prevEventHash ?? null);
-  const event_hash = crypto.createHash('sha256').update(preimage, 'utf8').digest('hex');
-
-  return {
-    ...base,
-    previous_hash: prevEventHash ?? null,
-    event_hash,
-  };
+  // Compute the hash the trigger would compute (canonical gif-audit/1 form).
+  const row = { ...base, previous_hash: prevEventHash ?? null };
+  row.event_hash = recomputeHash(row);
+  return row;
 }
 
 function buildCleanChain() {
@@ -243,6 +299,60 @@ function buildCleanChain() {
 // ===========================================================================
 
 console.log('\nChain Verifier — Part 1: Pure-Core Unit Tests\n');
+
+// ---------------------------------------------------------------------------
+// Test 1(0): known-answer test (KAT) — drift guard.
+//
+// The canonical KAT record must hash to the vendor-neutral known-answer digest.
+// This pins the replicated canonicalizer to the contract: if normalization, key
+// order, null/boolean encoding, or the timestamp form drifts, this fails. The
+// same digest is asserted against the live DB trigger in test_hash_chain.mjs,
+// so trigger ≡ verifier ≡ reference vectors ≡ sha256sum.
+// ---------------------------------------------------------------------------
+
+const KAT_DIGEST = '4ccf79a1a616c55b19cbcb5418d4c5fc31f45f793549a1b07d268b43455e6f10';
+
+{
+  const katRow = {
+    event_id:              '11111111-1111-1111-1111-111111111111',
+    occurred_at:           '2026-06-02T12:00:00.000Z',
+    persona_id:            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    session_id:            '55555555-5555-5555-5555-555555555555',
+    invoked_by_persona_id: null,
+    event_type:            'tool_call',
+    tool_name:             'db_read',
+    outcome:               'success',
+    flagged:               false,
+    purpose_declared:      'diligence read',
+    canon_version:         'gif-audit/1',
+    previous_hash:         null,
+  };
+
+  const canonical = canonicalize(buildBody(katRow, katRow.previous_hash));
+  const digest = crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
+
+  if (digest === KAT_DIGEST) {
+    pass('(0) KAT: canonicalizer reproduces the known-answer digest');
+  } else {
+    fail('(0) KAT: canonicalizer reproduces the known-answer digest',
+         `expected ${KAT_DIGEST}\n    got      ${digest}\n    canonical=${canonical}`);
+  }
+
+  // recomputeHash must agree with the direct canonicalize+sha256 path.
+  if (recomputeHash(katRow) === KAT_DIGEST) {
+    pass('(0) KAT: recomputeHash reproduces the known-answer digest');
+  } else {
+    fail('(0) KAT: recomputeHash reproduces the known-answer digest', `got ${recomputeHash(katRow)}`);
+  }
+
+  // Forward-safety: an unrecognized canon_version is uncheckable, not tamper.
+  const futureRow = { ...katRow, canon_version: 'gif-audit/2' };
+  if (recomputeHash(futureRow) === null) {
+    pass('(0) forward-safety: unknown canon_version → recomputeHash returns null (uncheckable)');
+  } else {
+    fail('(0) forward-safety: unknown canon_version → recomputeHash returns null', `got ${recomputeHash(futureRow)}`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Test 1(a): clean 3-row chain → 0 anomalies
@@ -528,17 +638,21 @@ if (!liveSkipped) {
       );
     }
 
-    // Fetch the seeded events using the exact same query as the CLI's DB shell,
-    // keyed by session_id for isolation. Use ::text casts to match the preimage.
+    // Fetch the seeded events using the exact same projection as the CLI's DB
+    // shell, keyed by session_id for isolation. occurred_at uses the same
+    // to_char(...'MS'...) the trigger uses; flagged is a real boolean.
     const rawResult = await pool.query(
       `SELECT event_id::text,
-              occurred_at::text,
+              to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
               persona_id::text,
               session_id::text,
               event_type,
               tool_name,
               outcome,
-              flagged::text,
+              flagged,
+              purpose_declared,
+              invoked_by_persona_id::text,
+              canon_version,
               event_hash,
               previous_hash
        FROM gif.audit_events

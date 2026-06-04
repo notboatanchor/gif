@@ -48,33 +48,95 @@ const { Pool } = pg;
 // Pure core — no DB dependency; importable by .mjs tests without a build step
 // ---------------------------------------------------------------------------
 /**
- * Build the SHA-256 preimage for an audit row, matching the trigger exactly.
+ * Canonical-form string normalization (gif-audit/1): Unicode NFC + trim, reject
+ * control characters, cap length at 8192. Applied to every protected string
+ * value before serialization.
  *
- * The trigger uses concat_ws('|', ...) with COALESCE for nullable fields, so
- * every preimage has exactly 9 pipe-delimited fields. The caller must supply
- * Postgres ::text-cast field values so timestamp format is byte-identical.
+ * Guarded against drift by the known-answer test in test_chain_verifier.mjs,
+ * which pins this canonicalizer to the vendor-neutral reference vectors.
+ *
+ * Parity note: the DB trigger's norm() does NFC + trim but does NOT reject
+ * control chars or cap length (it must never throw — audit-never-throws). For
+ * gif's controlled-vocabulary / persona.purpose inputs the two agree byte-for-
+ * byte; a string that trips this throw is surfaced as `uncheckable`, never as
+ * tamper.
  */
-export function buildPreimage(row, storedPreviousHash) {
-    return [
-        row.event_id,
-        row.occurred_at,
-        row.persona_id,
-        row.session_id ?? 'NULL',
-        row.event_type,
-        row.tool_name ?? 'NULL',
-        row.outcome,
-        row.flagged,
-        storedPreviousHash ?? 'NULL',
-    ].join('|');
+export const MAX_FIELD_LEN = 8192;
+export function normalizeString(s) {
+    // Control characters (C0 + DEL) are not permitted in a protected string field.
+    if (/[\u0000-\u001f\u007f]/.test(s)) {
+        throw new Error('control character in protected string field');
+    }
+    const n = s.normalize('NFC').trim();
+    if (n.length > MAX_FIELD_LEN) {
+        throw new Error('protected string field exceeds length cap');
+    }
+    return n;
 }
 /**
- * Recompute the SHA-256 event_hash for a row.
- *
- * Uses the row's own stored previous_hash as the chain link value — this is
- * the value the trigger used when computing the stored event_hash.
+ * Canonicalize (gif-audit/1): deterministic JSON with keys sorted
+ * lexicographically at every level, no insignificant whitespace, strings
+ * NFC-normalized + trimmed, null as the literal token `null`, booleans as
+ * true/false. Byte-identical to the DB trigger's manual JSON build and to a
+ * plain `sha256sum` of the same canonical string.
+ */
+export function canonicalize(v) {
+    if (v === null)
+        return 'null';
+    if (typeof v === 'boolean')
+        return v ? 'true' : 'false';
+    if (typeof v === 'number') {
+        if (!Number.isFinite(v))
+            throw new Error('non-finite number');
+        return JSON.stringify(v);
+    }
+    if (typeof v === 'string')
+        return JSON.stringify(normalizeString(v));
+    if (Array.isArray(v))
+        return '[' + v.map(canonicalize).join(',') + ']';
+    if (typeof v === 'object') {
+        const o = v;
+        const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
+        return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(o[k])).join(',') + '}';
+    }
+    throw new Error('uncanonicalizable value');
+}
+/**
+ * Assemble the gif-audit/1 canonical body for a row (event_hash excluded). Maps
+ * gif's stored columns to the canonical keys (persona_id → principal_id,
+ * invoked_by_persona_id → invoked_by_principal_id) and pins the constant
+ * `caller-governance` profile. Key insertion order is irrelevant — canonicalize
+ * sorts every level.
+ */
+export function buildBody(row, previousHash) {
+    return {
+        event_id: row.event_id,
+        event_type: row.event_type,
+        occurred_at: row.occurred_at,
+        outcome: row.outcome,
+        previous_hash: previousHash,
+        principal_id: row.persona_id,
+        profile: 'caller-governance',
+        profile_data: {
+            flagged: row.flagged,
+            invoked_by_principal_id: row.invoked_by_persona_id,
+            purpose_declared: row.purpose_declared,
+            session_id: row.session_id,
+        },
+        tool_name: row.tool_name,
+    };
+}
+/**
+ * Recompute the SHA-256 event_hash for a row in its stored canonical form,
+ * using the row's own stored previous_hash as the chain link (the value the
+ * trigger used). Returns null for an unrecognized canon_version — a row written
+ * under a newer canonical form cannot be re-verified here and must not be
+ * reported as tampered (forward-safety).
  */
 export function recomputeHash(row) {
-    const preimage = buildPreimage(row, row.previous_hash);
+    if (row.canon_version !== 'gif-audit/1')
+        return null;
+    const preimage = canonicalize(buildBody(row, row.previous_hash));
     return createHash('sha256').update(preimage, 'utf8').digest('hex');
 }
 /**
@@ -86,6 +148,8 @@ export function recomputeHash(row) {
  * Per-row categories:
  *   - legacy_null:   event_hash IS NULL  → skip verification, count only
  *   - hash_error:    event_hash = 'HASH_ERROR' → write-time sentinel, skip
+ *   - uncheckable:   unrecognized canon_version or normalization rejection →
+ *                    cannot recompute, NOT tamper (forward-safety)
  *   - hashed:        64-char hex event_hash → recompute + linkage check
  */
 export function verifyPartition(partitionKey, rows) {
@@ -97,6 +161,7 @@ export function verifyPartition(partitionKey, rows) {
         mismatches: [],
         breaks: [],
         hash_errors: [],
+        uncheckable: [],
         legacy_null: 0,
     };
     // prevHashedRow tracks the most recent row with a valid (non-sentinel) hash,
@@ -118,10 +183,25 @@ export function verifyPartition(partitionKey, rows) {
             isFirstHashed = false;
             continue;
         }
-        // This is a real hashed row.
+        // This is a real hashed row. Attempt to recompute its canonical hash.
+        // An unrecognized canon_version (recomputeHash → null) or a normalization
+        // rejection (throw) means the verifier cannot re-derive this row's hash;
+        // categorize as uncheckable (informational), never as tamper.
+        let expected;
+        try {
+            expected = recomputeHash(row);
+        }
+        catch {
+            expected = null;
+        }
+        if (expected === null) {
+            result.uncheckable.push(row.event_id);
+            prevHashedHash = row.event_hash;
+            isFirstHashed = false;
+            continue;
+        }
         result.hashed_checked++;
         // Recompute check: does the stored event_hash match the trigger's preimage?
-        const expected = recomputeHash(row);
         if (expected !== row.event_hash) {
             result.mismatches.push(row.event_id);
             // Still advance the linkage pointer so downstream rows aren't false-flagged.
@@ -224,6 +304,7 @@ export function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLook
     const total_mismatches = partitions.reduce((s, p) => s + p.mismatches.length, 0);
     const total_breaks = partitions.reduce((s, p) => s + p.breaks.length, 0);
     const total_hash_errors = partitions.reduce((s, p) => s + p.hash_errors.length, 0);
+    const total_uncheckable = partitions.reduce((s, p) => s + p.uncheckable.length, 0);
     const total_anchor_fails = anchorResults
         ? anchorResults.filter(a => a.status !== 'ok').length
         : 0;
@@ -233,6 +314,7 @@ export function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLook
         total_mismatches,
         total_breaks,
         total_hash_errors,
+        total_uncheckable,
         total_anchor_fails,
         ok: total_mismatches === 0 && total_breaks === 0 && total_anchor_fails === 0,
     };
@@ -249,17 +331,22 @@ async function fetchPartitions(pool) {
     const partitionMap = new Map();
     for (const { month } of monthsResult.rows) {
         // Fetch all rows in this partition, including NULL event_hash rows
-        // (legacy pre-006 rows) so we can count them. Explicit column list;
-        // no SELECT *.  All fields cast to ::text so the verifier uses the
-        // exact byte representation the trigger used when building the preimage.
+        // (legacy pre-006 rows) so we can count them. Explicit column list; no
+        // SELECT *. occurred_at is rendered with the SAME to_char(...'MS'...)
+        // expression the migration-014 trigger uses, so the verifier consumes a
+        // byte-identical timestamp string by construction. flagged is fetched as a
+        // real boolean (the canonicalizer needs true/false, not "true"/"false").
         const rowsResult = await pool.query(`SELECT event_id::text,
-              occurred_at::text,
+              to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
               persona_id::text,
               session_id::text,
               event_type,
               tool_name,
               outcome,
-              flagged::text,
+              flagged,
+              purpose_declared,
+              invoked_by_persona_id::text,
+              canon_version,
               event_hash,
               previous_hash
        FROM gif.audit_events
@@ -353,6 +440,12 @@ function renderHuman(result) {
                 lines.push(`    ${id}`);
             }
         }
+        if (p.uncheckable.length > 0) {
+            lines.push(`  NOTE — Uncheckable rows (unrecognized canon_version or normalization rejection; not tamper):`);
+            for (const id of p.uncheckable) {
+                lines.push(`    ${id}`);
+            }
+        }
         if (p.mismatches.length > 0) {
             lines.push(`  TAMPER ALERT — Hash mismatches (field values altered after insert):`);
             for (const id of p.mismatches) {
@@ -390,6 +483,7 @@ function renderHuman(result) {
     lines.push(`  Mismatches      : ${result.total_mismatches}`);
     lines.push(`  Linkage breaks  : ${result.total_breaks}`);
     lines.push(`  HASH_ERROR rows : ${result.total_hash_errors}  (warnings only)`);
+    lines.push(`  Uncheckable rows: ${result.total_uncheckable}  (informational only)`);
     if (result.anchors !== null) {
         lines.push(`  Anchor failures : ${result.total_anchor_fails}`);
     }

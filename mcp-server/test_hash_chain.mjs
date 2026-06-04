@@ -58,19 +58,58 @@ function fail(label, detail) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function computeExpectedHash(row, prevHash) {
-  const preimage = [
-    row.event_id,
-    row.occurred_at.toISOString(),
-    row.persona_id,
-    row.session_id ?? 'NULL',
-    row.event_type,
-    row.tool_name ?? 'NULL',
-    row.outcome,
-    String(row.flagged),
-    prevHash ?? 'NULL',
-  ].join('|');
-  return crypto.createHash('sha256').update(preimage, 'utf8').digest('hex');
+// gif-audit/1 canonicalizer (replica of verify_audit_chain.ts; guarded
+// against drift from the reference vectors by the KAT in test_chain_verifier.mjs).
+const MAX_FIELD_LEN = 8192;
+
+function normalizeString(str) {
+  if (/[\u0000-\u001f\u007f]/.test(str)) {
+    throw new Error('control character in protected string field');
+  }
+  const n = str.normalize('NFC').trim();
+  if (n.length > MAX_FIELD_LEN) {
+    throw new Error('protected string field exceeds length cap');
+  }
+  return n;
+}
+
+function canonicalize(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('non-finite number');
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string') return JSON.stringify(normalizeString(value));
+  if (Array.isArray(value)) return '[' + value.map(canonicalize).join(',') + ']';
+  if (typeof value === 'object') {
+    const obj = value;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
+  }
+  throw new Error(`uncanonicalizable value of type ${typeof value}`);
+}
+
+// Build the gif-audit/1 canonical body from a row whose fields are shaped as fetched
+// (occurred_at = ms-RFC3339 string, flagged = boolean), then SHA-256 it.
+function recomputeCanonicalHash(row) {
+  const body = {
+    event_id:      row.event_id,
+    event_type:    row.event_type,
+    occurred_at:   row.occurred_at,
+    outcome:       row.outcome,
+    previous_hash: row.previous_hash ?? null,
+    principal_id:  row.persona_id,
+    profile:       'caller-governance',
+    profile_data: {
+      flagged:                 row.flagged,
+      invoked_by_principal_id: row.invoked_by_persona_id ?? null,
+      purpose_declared:        row.purpose_declared ?? null,
+      session_id:              row.session_id,
+    },
+    tool_name:     row.tool_name,
+  };
+  return crypto.createHash('sha256').update(canonicalize(body), 'utf8').digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -152,19 +191,22 @@ try {
       `ev2.previous_hash=${ev2.previous_hash}, ev1.event_hash=${ev1.event_hash}`);
   }
 
-  // Test 3: verify hash computation matches expected SHA-256
-  // Note: occurred_at format in the preimage uses Postgres timestamptz text representation.
-  // We compare the DB-computed hash against a JS recomputation using the same
-  // occurred_at string as stored. Fetch the raw text to match the preimage exactly.
+  // Test 3: the DB trigger's event_hash matches an independent recomputation of
+  // the gif-audit/1 canonical preimage. Fetch fields shaped exactly as the
+  // verifier does: occurred_at via the same to_char(...'MS'...) the trigger uses,
+  // flagged as a real boolean, plus the chained purpose_declared field.
   const rawRows = await pool.query(
     `SELECT event_id::text,
-            occurred_at::text,
+            to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
             persona_id::text,
             session_id::text,
             event_type,
             tool_name,
             outcome,
-            flagged::text,
+            flagged,
+            purpose_declared,
+            invoked_by_persona_id::text,
+            canon_version,
             event_hash,
             previous_hash
      FROM gif.audit_events
@@ -174,25 +216,19 @@ try {
   );
 
   const raw1 = rawRows.rows[0];
-  const preimage1 = [
-    raw1.event_id,
-    raw1.occurred_at,
-    raw1.persona_id,
-    raw1.session_id ?? 'NULL',
-    raw1.event_type,
-    raw1.tool_name ?? 'NULL',
-    raw1.outcome,
-    raw1.flagged,
-    raw1.previous_hash ?? 'NULL',
-  ].join('|');
+  const expectedHash1 = recomputeCanonicalHash(raw1);
 
-  const expectedHash1 = crypto.createHash('sha256').update(preimage1, 'utf8').digest('hex');
+  if (raw1.canon_version === 'gif-audit/1') {
+    pass('canon_version stamped gif-audit/1 on new rows');
+  } else {
+    fail('canon_version stamped gif-audit/1 on new rows', `Got: ${raw1.canon_version}`);
+  }
 
   if (expectedHash1 === raw1.event_hash) {
-    pass('event_hash matches expected SHA-256(preimage)');
+    pass('event_hash matches independent SHA-256(canonicalize(body)) — gif-audit/1');
   } else {
-    fail('event_hash matches expected SHA-256(preimage)',
-      `Expected: ${expectedHash1}\nGot:      ${raw1.event_hash}\nPreimage: ${preimage1}`);
+    fail('event_hash matches independent SHA-256(canonicalize(body)) — gif-audit/1',
+      `Expected: ${expectedHash1}\nGot:      ${raw1.event_hash}`);
   }
 
   // Test 4: gif_app cannot UPDATE event_hash (RLS append-only enforcement)
