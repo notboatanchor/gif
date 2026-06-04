@@ -382,7 +382,7 @@ export function verifyAnchors(
         partition_name: anchor.partition_name,
         anchored_by:    anchor.anchored_by,
         status:         'shrunk' as const,
-        detail:         `live row count ${liveCount} < anchored count ${anchor.event_count} — possible deletion`,
+        detail:         `live row count ${String(liveCount)} < anchored count ${String(anchor.event_count)} — possible deletion`,
       };
     }
 
@@ -587,10 +587,10 @@ function renderHuman(result: ChainVerifyResult): string {
   for (const p of result.partitions) {
     const status = (p.mismatches.length === 0 && p.breaks.length === 0) ? 'OK' : 'FAIL';
     lines.push(`Partition: ${p.partition}  [${status}]`);
-    lines.push(`  Total rows     : ${p.total_rows}`);
-    lines.push(`  Hashed checked : ${p.hashed_checked}`);
-    lines.push(`  Links verified : ${p.links_verified}`);
-    lines.push(`  Legacy null    : ${p.legacy_null}  (pre-migration-006, informational)`);
+    lines.push(`  Total rows     : ${String(p.total_rows)}`);
+    lines.push(`  Hashed checked : ${String(p.hashed_checked)}`);
+    lines.push(`  Links verified : ${String(p.links_verified)}`);
+    lines.push(`  Legacy null    : ${String(p.legacy_null)}  (pre-migration-006, informational)`);
 
     if (p.hash_errors.length > 0) {
       lines.push(`  WARNING — HASH_ERROR rows (write-time compute failure, not tamper):`);
@@ -642,13 +642,13 @@ function renderHuman(result: ChainVerifyResult): string {
 
   lines.push('Summary');
   lines.push('-------');
-  lines.push(`  Partitions      : ${result.partitions.length}`);
-  lines.push(`  Mismatches      : ${result.total_mismatches}`);
-  lines.push(`  Linkage breaks  : ${result.total_breaks}`);
-  lines.push(`  HASH_ERROR rows : ${result.total_hash_errors}  (warnings only)`);
-  lines.push(`  Uncheckable rows: ${result.total_uncheckable}  (informational only)`);
+  lines.push(`  Partitions      : ${String(result.partitions.length)}`);
+  lines.push(`  Mismatches      : ${String(result.total_mismatches)}`);
+  lines.push(`  Linkage breaks  : ${String(result.total_breaks)}`);
+  lines.push(`  HASH_ERROR rows : ${String(result.total_hash_errors)}  (warnings only)`);
+  lines.push(`  Uncheckable rows: ${String(result.total_uncheckable)}  (informational only)`);
   if (result.anchors !== null) {
-    lines.push(`  Anchor failures : ${result.total_anchor_fails}`);
+    lines.push(`  Anchor failures : ${String(result.total_anchor_fails)}`);
   }
   lines.push('');
   lines.push(result.ok ? 'RESULT: PASS — chain intact' : 'RESULT: FAIL — anomalies detected');
