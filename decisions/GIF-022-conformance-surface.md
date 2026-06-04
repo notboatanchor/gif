@@ -22,6 +22,14 @@
   runner. On extraction to `gif-spec`, C5.x maps to SEP-2484
   documented exclusions (not-protocol-observable). The MUSTs
   themselves are unchanged — only the verification surface is named.
+- 2026-06-04 — audit-record integrity hash aligned to the
+  vendor-neutral canonical form (`gif-audit/1`, migration 014; see the GIF-003 update).
+  This is the DB-side tamper-evidence layer (`event_hash` /
+  `previous_hash`), distinct from the Category 4 wire-observable
+  event-emission MUSTs — under SEP-2484 it is a not-protocol-observable
+  guarantee, verified out-of-band by
+  `mcp-server/src/cli/verify_audit_chain.ts`, not via an MCP surface.
+  No conformance-surface MUST changed.
 
 ## Decision
 
@@ -222,6 +230,16 @@ specification; this ADR consolidates and surfaces them.
   access. (CLAUDE.md append-only audit trail; audit-table read
   access is scope-gated and distinct from the `personas`
   `admin_read` gate of C6.2.)
+
+*Integrity-hash addendum (migration 014).* Beyond the emission MUSTs
+above, each audit row carries a tamper-evidence hash chain
+(`event_hash` / `previous_hash`) computed in the `gif-audit/1`
+sorted-JSON canonical form (GIF-003). `purpose_declared` is part of the
+hashed preimage, so the declared governance reason is tamper-evident.
+Like C4.1 (INSERT-only), this is a DB-side, not-protocol-observable
+guarantee — it is NOT part of the wire conformance surface and is
+verified out-of-band by the chain verifier CLI, not through an MCP
+tool.
 
 ### Category 5 — Combination policy scoping
 
