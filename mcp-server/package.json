@@ -21,13 +21,14 @@
     "test": "node test_setup.mjs && node test_mcp.mjs && node test_audit_trail.mjs && node test_delegation.mjs && node test_hash_chain.mjs && node test_identity_binding.mjs && node test_read_log.mjs && node test_retention.mjs && node test_combination_policies.mjs && node test_session_lifecycle.mjs && node test_session_dispatch.mjs && node conformance/c1_handle_mint.mjs && node conformance/c2_dispatch_validation.mjs && node conformance/c3_closure.mjs && node conformance/c4_audit_emission.mjs && node conformance/c5_combination_scoping.mjs && node conformance/c6_identity_gates.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0-alpha.2",
-    "@modelcontextprotocol/node": "2.0.0-alpha.2",
     "@cfworker/json-schema": "^4.1.1",
+    "@modelcontextprotocol/node": "2.0.0-alpha.2",
+    "@modelcontextprotocol/server": "2.0.0-alpha.2",
     "pg": "^8.11.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0-alpha.2",
     "@types/node": "^22.19.19",
     "@types/pg": "^8.11.0",
     "eslint": "^9.0.0",
