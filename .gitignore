@@ -12,12 +12,14 @@ mcp-server/node_modules/
 # OS
 .DS_Store
 
-# Claude Code — local settings and runtime data (not for contributors)
-.claude/settings.local.json
-.claude/evals/*.log
-.claude/evals/baseline.json
-.claude/memory/
-.claude/homunculus/
+# Claude Code — ignore all local/runtime data by default; allowlist only the
+# assets intentionally shipped to contributors. Allowlist on purpose: a new
+# local artifact (logs, caches, state) defaults to ignored, so nothing leaks
+# into the public repo by omission — the failure mode that left checkpoints.log
+# tracked. To ship a new .claude asset, add an explicit `!` re-include below.
+.claude/*
+!.claude/skills/
+!.claude/agents/
 
 # Internal session state — not for public repository
 project-state.md
