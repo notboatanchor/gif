@@ -85,6 +85,14 @@ precedence (closed > expired) or TTL handling. `GIF_SESSION_TTL_SECONDS` is
 parsed once at process startup with fail-fast on misconfig (non-finite or
 non-positive). See GIF-020, GIF-022 §C2.
 
+**Enforcement, audit, and schema changes require review before merge.** Any
+change touching `schema/`, `mcp-server/src/tools/`, `mcp-server/src/enforcement.ts`,
+or the audit trail must pass a code + security review and a clean-install
+(`npm ci`) test run before merge. These layers carry the framework's security
+and tamper-evidence guarantees; the review gate is mandatory for them, not
+optional. Do not merge enforcement/audit/schema work on an in-session "green"
+alone — verify on a clean install.
+
 ---
 
 ## Compliance Hardening Roadmap
@@ -134,6 +142,9 @@ the canonical sequence automatically — no project-local copy needed.
 - Comment on every table and every non-obvious column
 - Migrations numbered sequentially: `001_gif_core.sql`, `002_gif_core.sql`, etc.
 - No table prefixes — the `gif` schema provides the namespace
+- A new migration must be wired into **both** apply-paths — `scripts/install.sh`
+  (`GIF_MIGRATIONS`) and `ops/docker/init-db.sh` (`apply_migration` sequence).
+  These are parallel and drift silently when only one is updated.
 
 **TypeScript**
 - Strict mode enabled
