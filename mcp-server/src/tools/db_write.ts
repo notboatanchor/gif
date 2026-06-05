@@ -34,6 +34,7 @@
 import pool from '../db.js';
 import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
 import type { ToolHandler } from './types.js';
+import { isSafeIdentifier, quoteIdentifier } from './sql-identifier.js';
 
 // ----------------------------------------------------------------------------
 // Table allowlist
@@ -142,20 +143,36 @@ export async function executeDbWrite(
     };
   }
 
-  // Build parameterized INSERT
-  // Table name validated against allowlist — safe to interpolate.
-  // Column names are quoted. Values are parameterized.
-  const columnList = columns.map(c => `"${c}"`).join(', ');
-  const valuePlaceholders = columns.map((_, i) => `$${String(i + 1)}`).join(', ');
-  const values = columns.map(c => parsedRecord[c]);
+  // Build the INSERT.
+  //   - Table name: allowlisted above; quoteIdentifier re-validates + escapes it.
+  //   - Column names are caller-supplied (JSON.parse of `record`) and become SQL
+  //     identifiers. They cannot be parameterized, so each is validated as a
+  //     plain identifier and escaped — a bare `"${c}"` interpolation here is an
+  //     injection vector. Values are parameterized ($1, $2, ...).
+  const invalidColumn = columns.find((c) => !isSafeIdentifier(c));
+  if (invalidColumn !== undefined) {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        error: 'Invalid column name: not a valid column identifier',
+      }) }],
+      isError: true,
+    };
+  }
 
-  const query = `
-    INSERT INTO "${table}" (${columnList})
-    VALUES (${valuePlaceholders})
-    RETURNING *
-  `;
-
+  // Construct + run inside the try so a defensive quoteIdentifier throw (every
+  // column is already validated above, so this is belt-and-suspenders) returns a
+  // clean tool error rather than escaping the handler.
   try {
+    const columnList = columns.map(c => quoteIdentifier(c)).join(', ');
+    const valuePlaceholders = columns.map((_, i) => `$${String(i + 1)}`).join(', ');
+    const values = columns.map(c => parsedRecord[c]);
+
+    const query = `
+      INSERT INTO ${quoteIdentifier(table)} (${columnList})
+      VALUES (${valuePlaceholders})
+      RETURNING *
+    `;
+
     const result = await pool.query(query, values);
 
     return {
