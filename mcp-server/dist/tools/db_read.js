@@ -30,6 +30,7 @@
 // =============================================================================
 import pool from '../db.js';
 import { logScopeViolation, logAuditRead } from '../persona.js';
+import { isSafeIdentifier, quoteIdentifier } from './sql-identifier.js';
 // ----------------------------------------------------------------------------
 // Table allowlist
 // Only these tables may be queried via db_read regardless of persona scope.
@@ -124,19 +125,35 @@ export async function executeDbRead(args, persona, sessionId) {
             };
         }
     }
-    // Build parameterized query
-    // Table name is validated against allowlist above — safe to interpolate.
-    // Filter values are parameterized — no SQL injection possible.
+    // Build the query.
+    //   - Table name: allowlisted above; quoteIdentifier re-validates + escapes it.
+    //   - Filter KEYS are caller-supplied (JSON.parse of `filters`) and become SQL
+    //     identifiers. They cannot be parameterized, so each is validated as a
+    //     plain identifier and escaped — a bare `"${key}"` interpolation here is an
+    //     injection vector (e.g. a key of  id" = id OR pg_sleep(10) ... --  ).
+    //   - Filter VALUES are parameterized ($1, $2, ...).
     const filterKeys = Object.keys(parsedFilters);
-    const whereClauses = filterKeys.map((key, i) => `"${key}" = $${String(i + 1)}`);
-    const whereString = whereClauses.length > 0
-        ? `WHERE ${whereClauses.join(' AND ')}`
-        : '';
-    const filterValues = filterKeys.map(key => parsedFilters[key]);
-    // Append limit as the last parameter
-    const limitParam = `$${String(filterValues.length + 1)}`;
-    const query = `SELECT * FROM "${table}" ${whereString} LIMIT ${limitParam}`;
+    const invalidKey = filterKeys.find((key) => !isSafeIdentifier(key));
+    if (invalidKey !== undefined) {
+        return {
+            content: [{ type: 'text', text: JSON.stringify({
+                        error: 'Invalid filter key: not a valid column identifier',
+                    }) }],
+            isError: true,
+        };
+    }
+    // Construct + run inside the try so a defensive quoteIdentifier throw (every
+    // key is already validated above, so this is belt-and-suspenders) returns a
+    // clean tool error rather than escaping the handler.
     try {
+        const whereClauses = filterKeys.map((key, i) => `${quoteIdentifier(key)} = $${String(i + 1)}`);
+        const whereString = whereClauses.length > 0
+            ? `WHERE ${whereClauses.join(' AND ')}`
+            : '';
+        const filterValues = filterKeys.map(key => parsedFilters[key]);
+        // Append limit as the last parameter
+        const limitParam = `$${String(filterValues.length + 1)}`;
+        const query = `SELECT * FROM ${quoteIdentifier(table)} ${whereString} LIMIT ${limitParam}`;
         const result = await pool.query(query, [...filterValues, limit]);
         // Log reads against audit-class tables for chain-of-custody (Sprint 5).
         // Fire-and-forget: failure must not mask the read response.
