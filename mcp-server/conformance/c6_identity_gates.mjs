@@ -55,14 +55,15 @@
 //      the governance flip — re-validated at dispatch (index.ts validatePersona
 //      runs on every tool call before session validation) — is the cause.
 //
-// Implementation note (latent type/DB drift, logged here — NOT a C6 conformance
-// issue): the TypeScript GovernanceReviewStatus type (enforcement.ts) enumerates
-// 'revoked' and 'auto_approved' in addition to 'pending'/'approved', but the DB
-// ENUM governance_review_status (schema/001_gif_core.sql) defines only
+// Implementation note: the TypeScript GovernanceReviewStatus type
+// (enforcement.ts) and the DB ENUM governance_review_status
+// (schema/001_gif_core.sql) define the same three values —
 // 'auto_approved' | 'pending' | 'approved'. C6.3 flips to 'pending' (DB-valid,
 // != 'approved'); the gate (enforcement.ts: `!== 'approved'`) treats every
-// non-'approved' value identically, so the MUST is exercised regardless. The
-// type-vs-DB drift is worth a separate cleanup but does not affect conformance.
+// non-'approved' value identically, so the MUST is exercised regardless.
+// Careful not to conflate this with the adjacent PersonaStatus type
+// ('active' | 'suspended' | 'revoked' | 'expired') — that is the persona
+// lifecycle vocabulary, not the review-status vocabulary.
 //
 // Requires: MCP server running on port 3100; test_setup.mjs run first (provides
 // the schema, the gif_admin role, and the issue path). C6 seeds its own
