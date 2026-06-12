@@ -12,6 +12,9 @@
     }
   },
   "types": "dist/enforcement.d.ts",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
