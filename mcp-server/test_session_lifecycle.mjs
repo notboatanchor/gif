@@ -155,8 +155,8 @@ let sessionHandle;
   if (auditRow.rows.length !== 1) {
     fail('exactly one session_start audit event (C1.5)',
          `expected 1, got ${auditRow.rows.length}`);
-  } else if (auditRow.rows[0].outcome !== 'success') {
-    fail('session_start audit event outcome=success',
+  } else if (auditRow.rows[0].outcome !== 'allowed') {
+    fail('session_start audit event outcome=allowed',
          `got ${auditRow.rows[0].outcome}`);
   } else {
     pass('session_start audit event emitted (C1.5)');
@@ -200,8 +200,8 @@ let sessionHandle;
   if (auditRow.rows.length !== 1) {
     fail('exactly one session_close audit event (C3.4)',
          `expected 1, got ${auditRow.rows.length}`);
-  } else if (auditRow.rows[0].outcome !== 'success') {
-    fail('session_close audit event outcome=success',
+  } else if (auditRow.rows[0].outcome !== 'allowed') {
+    fail('session_close audit event outcome=allowed',
          `got ${auditRow.rows[0].outcome}`);
   } else {
     pass('session_close audit event emitted (C3.4)');

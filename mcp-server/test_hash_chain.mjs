@@ -58,7 +58,7 @@ function fail(label, detail) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// gif-audit/1 canonicalizer (replica of verify_audit_chain.ts; guarded
+// gif-audit/2 canonicalizer (replica of verify_audit_chain.ts; guarded
 // against drift from the reference vectors by the KAT in test_chain_verifier.mjs).
 const MAX_FIELD_LEN = 8192;
 
@@ -90,24 +90,26 @@ function canonicalize(value) {
   throw new Error(`uncanonicalizable value of type ${typeof value}`);
 }
 
-// Build the gif-audit/1 canonical body from a row whose fields are shaped as fetched
-// (occurred_at = ms-RFC3339 string, flagged = boolean), then SHA-256 it.
+// Build the gif-audit/2 canonical body from a row whose fields are shaped as fetched
+// (occurred_at = ms-RFC3339 string, flagged = boolean), then SHA-256 it. Mirrors
+// buildBodyV2() in verify_audit_chain.ts and the migration-015 trigger.
 function recomputeCanonicalHash(row) {
   const body = {
     event_id:      row.event_id,
     event_type:    row.event_type,
+    extensions: {
+      'caller-governance': {
+        flagged:                 row.flagged,
+        invoked_by_principal_id: row.invoked_by_persona_id ?? null,
+        purpose_declared:        row.purpose_declared ?? null,
+        session_id:              row.session_id ?? null,
+      },
+    },
     occurred_at:   row.occurred_at,
     outcome:       row.outcome,
     previous_hash: row.previous_hash ?? null,
     principal_id:  row.persona_id,
-    profile:       'caller-governance',
-    profile_data: {
-      flagged:                 row.flagged,
-      invoked_by_principal_id: row.invoked_by_persona_id ?? null,
-      purpose_declared:        row.purpose_declared ?? null,
-      session_id:              row.session_id,
-    },
-    tool_name:     row.tool_name,
+    tool_name:     row.tool_name ?? null,
   };
   return crypto.createHash('sha256').update(canonicalize(body), 'utf8').digest('hex');
 }
@@ -142,7 +144,7 @@ try {
   await pool.query(
     `INSERT INTO gif.audit_events
        (persona_id, session_id, event_type, tool_name, outcome, flagged, purpose_declared)
-     VALUES ($1, $2, 'tool_call', 'test_hash_1', 'success', false, 'hash chain test')`,
+     VALUES ($1, $2, 'tool_call', 'test_hash_1', 'allowed', false, 'hash chain test')`,
     [personaId, sessionId]
   );
 
@@ -150,7 +152,7 @@ try {
   await pool.query(
     `INSERT INTO gif.audit_events
        (persona_id, session_id, event_type, tool_name, outcome, flagged, purpose_declared)
-     VALUES ($1, $2, 'tool_call', 'test_hash_2', 'success', false, 'hash chain test')`,
+     VALUES ($1, $2, 'tool_call', 'test_hash_2', 'allowed', false, 'hash chain test')`,
     [personaId, sessionId]
   );
 
@@ -192,7 +194,7 @@ try {
   }
 
   // Test 3: the DB trigger's event_hash matches an independent recomputation of
-  // the gif-audit/1 canonical preimage. Fetch fields shaped exactly as the
+  // the gif-audit/2 canonical preimage. Fetch fields shaped exactly as the
   // verifier does: occurred_at via the same to_char(...'MS'...) the trigger uses,
   // flagged as a real boolean, plus the chained purpose_declared field.
   const rawRows = await pool.query(
@@ -218,16 +220,16 @@ try {
   const raw1 = rawRows.rows[0];
   const expectedHash1 = recomputeCanonicalHash(raw1);
 
-  if (raw1.canon_version === 'gif-audit/1') {
-    pass('canon_version stamped gif-audit/1 on new rows');
+  if (raw1.canon_version === 'gif-audit/2') {
+    pass('canon_version stamped gif-audit/2 on new rows');
   } else {
-    fail('canon_version stamped gif-audit/1 on new rows', `Got: ${raw1.canon_version}`);
+    fail('canon_version stamped gif-audit/2 on new rows', `Got: ${raw1.canon_version}`);
   }
 
   if (expectedHash1 === raw1.event_hash) {
-    pass('event_hash matches independent SHA-256(canonicalize(body)) — gif-audit/1');
+    pass('event_hash matches independent SHA-256(canonicalize(body)) — gif-audit/2');
   } else {
-    fail('event_hash matches independent SHA-256(canonicalize(body)) — gif-audit/1',
+    fail('event_hash matches independent SHA-256(canonicalize(body)) — gif-audit/2',
       `Expected: ${expectedHash1}\nGot:      ${raw1.event_hash}`);
   }
 

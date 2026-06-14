@@ -140,6 +140,7 @@ apply_migration "011_remove_research_pipeline_tables.sql" \
 apply_migration "012_schema_migrations.sql"     /schema/012_schema_migrations.sql
 apply_migration "013_session_v2_semantics.sql"  /schema/013_session_v2_semantics.sql
 apply_migration "014_audit_canonical_json.sql"  /schema/014_audit_canonical_json.sql
+apply_migration "015_audit_canonical_json_v2.sql" /schema/015_audit_canonical_json_v2.sql
 
 # ---------------------------------------------------------------------------
 # Step 4: Audit partition management (as gif_admin)

@@ -157,7 +157,7 @@ function createServer() {
           sessionId:       sessionCheck.auditSessionId,
           eventType,
           toolName:        name,
-          outcome:         'rejected',
+          outcome:         'denied',
           sourceRef:       sessionCheck.reason,
           purposeDeclared: validation.persona.purpose,
         });
@@ -197,7 +197,7 @@ function createServer() {
         sessionId,
         eventType,
         toolName:        name,
-        outcome:         result === undefined || result.isError ? 'error' : 'success',
+        outcome:         result === undefined || result.isError ? 'error' : 'allowed',
         sourceRef,
         humanActorId,
         purposeDeclared: validation.persona.purpose,

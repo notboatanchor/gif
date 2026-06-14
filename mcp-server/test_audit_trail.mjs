@@ -94,7 +94,7 @@ try {
   // Insert a valid audit event — this should succeed
   const insertResult = await pool.query(
     `INSERT INTO audit_events (persona_id, event_type, outcome)
-     VALUES ($1, 'scope_check', 'success')
+     VALUES ($1, 'scope_check', 'allowed')
      RETURNING event_id, occurred_at`,
     [personaId]
   );

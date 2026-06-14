@@ -120,9 +120,38 @@ function buildBody(row, previousHash) {
   };
 }
 
+// gif-audit/2 body: extensions keyed object (one entry: caller-governance) +
+// abstract outcome. Mirrors buildBodyV2() in verify_audit_chain.ts and the
+// migration-015 trigger.
+function buildBodyV2(row, previousHash) {
+  return {
+    event_id:      row.event_id,
+    event_type:    row.event_type,
+    extensions: {
+      'caller-governance': {
+        flagged:                 row.flagged,
+        invoked_by_principal_id: row.invoked_by_persona_id ?? null,
+        purpose_declared:        row.purpose_declared ?? null,
+        session_id:              row.session_id ?? null,
+      },
+    },
+    occurred_at:   row.occurred_at,
+    outcome:       row.outcome,
+    previous_hash: previousHash,
+    principal_id:  row.persona_id,
+    tool_name:     row.tool_name ?? null,
+  };
+}
+
 function recomputeHash(row) {
-  if (row.canon_version !== 'gif-audit/1') return null;
-  const preimage = canonicalize(buildBody(row, row.previous_hash));
+  let preimage;
+  if (row.canon_version === 'gif-audit/2') {
+    preimage = canonicalize(buildBodyV2(row, row.previous_hash));
+  } else if (row.canon_version === 'gif-audit/1') {
+    preimage = canonicalize(buildBody(row, row.previous_hash));
+  } else {
+    return null;
+  }
   return crypto.createHash('sha256').update(preimage, 'utf8').digest('hex');
 }
 
@@ -346,11 +375,105 @@ const KAT_DIGEST = '4ccf79a1a616c55b19cbcb5418d4c5fc31f45f793549a1b07d268b43455e
   }
 
   // Forward-safety: an unrecognized canon_version is uncheckable, not tamper.
-  const futureRow = { ...katRow, canon_version: 'gif-audit/2' };
+  // (gif-audit/1 and /2 are both recognized now, so use a genuinely-unknown
+  // future version here.)
+  const futureRow = { ...katRow, canon_version: 'gif-audit/99' };
   if (recomputeHash(futureRow) === null) {
     pass('(0) forward-safety: unknown canon_version → recomputeHash returns null (uncheckable)');
   } else {
     fail('(0) forward-safety: unknown canon_version → recomputeHash returns null', `got ${recomputeHash(futureRow)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Test 1(0b): gif-audit/2 known-answer test (KAT) — extensions-keyed-object guard.
+//
+// Two checks, both drift guards for the /2 canonical form:
+//   (i)  gif's own one-entry caller-governance KAT — the record gif actually
+//        EMITS. The expected digest is the value gif reported to and was
+//        confirmed by the vendor-neutral vector authority; it is reproducible by
+//        a stock `printf ... | sha256sum` of the canonical preimage (see the
+//        gif-audit/2 migration / docs), so it is not a self-minted constant.
+//        Asserting it via recomputeHash() exercises the column→canonical-key
+//        mapping and the canon_version='gif-audit/2' routing in one shot.
+//   (ii) a SYNTHETIC two-extension fixture (caller-governance + a neutral
+//        'x-test-extension') that pins the multi-extension rule — top-level type
+//        ids sorted, nested keys sorted, string/bool/null encoding — without
+//        embedding any other party's profile. The cross-vendor multi-extension
+//        KAT lives with the vendor-neutral vectors, not in this repo.
+// ---------------------------------------------------------------------------
+
+// gif's caller-governance /2 KAT (segment head, previous_hash=null).
+const KAT_CG2_DIGEST = 'd494769c1ae442ea88dd190068747abf63c0568a3b856f85791b1a50a99d48b4';
+
+{
+  // (i) The one-entry caller-governance record gif emits, in DB-row shape.
+  const emittedRow = {
+    event_id:              '99999999-9999-9999-9999-999999999999',
+    occurred_at:           '2026-06-06T12:00:00.000Z',
+    persona_id:            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    session_id:            '55555555-5555-5555-5555-555555555555',
+    invoked_by_persona_id: null,
+    event_type:            'tool_call',
+    tool_name:             'export',
+    outcome:               'deferred',
+    flagged:               false,
+    purpose_declared:      'reconcile June invoices',
+    canon_version:         'gif-audit/2',
+    previous_hash:         null,
+  };
+
+  // recomputeHash() routes by canon_version → buildBodyV2 → canonicalize → sha256.
+  // Matching KAT_CG2_DIGEST proves the /2 branch, the column→canonical-key
+  // mapping, and the canonical bytes all at once.
+  const emittedDigest = recomputeHash(emittedRow);
+  if (emittedDigest === KAT_CG2_DIGEST) {
+    pass('(0b) KAT /2: caller-governance row reproduces the known-answer digest via the /2 builder');
+  } else {
+    fail('(0b) KAT /2: caller-governance row reproduces the known-answer digest',
+         `expected ${KAT_CG2_DIGEST}\n    got      ${emittedDigest}`);
+  }
+
+  // The same logical row under /1 vs /2 MUST hash differently — proof the
+  // canon_version branch selects a different preimage shape (extensions keyed
+  // object vs profile/profile_data), not the same bytes by accident.
+  const asV1Digest = recomputeHash({ ...emittedRow, canon_version: 'gif-audit/1' });
+  if (asV1Digest !== null && asV1Digest !== emittedDigest) {
+    pass('(0b) KAT /2: /1 and /2 preimage shapes hash differently for the same logical row');
+  } else {
+    fail('(0b) KAT /2: /1 and /2 preimage shapes hash differently for the same logical row',
+         `v1=${asV1Digest} v2=${emittedDigest}`);
+  }
+
+  // (ii) Synthetic two-extension mechanics. caller-governance < x-test-extension
+  // (top-level sort); within x-test-extension alpha < beta < gamma (nested sort);
+  // string/bool/null each have one canonical form. No third-party profile.
+  const synthBody = {
+    event_id:      '99999999-9999-9999-9999-999999999999',
+    event_type:    'tool_call',
+    extensions: {
+      'caller-governance': {
+        flagged:                 false,
+        invoked_by_principal_id: null,
+        purpose_declared:        'reconcile June invoices',
+        session_id:              '55555555-5555-5555-5555-555555555555',
+      },
+      'x-test-extension': { alpha: 'one', beta: true, gamma: null },
+    },
+    occurred_at:   '2026-06-06T12:00:00.000Z',
+    outcome:       'deferred',
+    previous_hash: null,
+    principal_id:  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    tool_name:     'export',
+  };
+  const SYNTH_CANONICAL = '{"event_id":"99999999-9999-9999-9999-999999999999","event_type":"tool_call","extensions":{"caller-governance":{"flagged":false,"invoked_by_principal_id":null,"purpose_declared":"reconcile June invoices","session_id":"55555555-5555-5555-5555-555555555555"},"x-test-extension":{"alpha":"one","beta":true,"gamma":null}},"occurred_at":"2026-06-06T12:00:00.000Z","outcome":"deferred","previous_hash":null,"principal_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","tool_name":"export"}';
+  const synthCanonical = canonicalize(synthBody);
+
+  if (synthCanonical === SYNTH_CANONICAL) {
+    pass('(0b) KAT /2: two-extension fixture canonicalizes with sorted type ids + sorted nested keys');
+  } else {
+    fail('(0b) KAT /2: two-extension fixture canonical bytes match expected',
+         `expected ${SYNTH_CANONICAL}\n    got      ${synthCanonical}`);
   }
 }
 
@@ -633,7 +756,7 @@ if (!liveSkipped) {
       await pool.query(
         `INSERT INTO gif.audit_events
            (persona_id, session_id, event_type, tool_name, outcome, flagged, purpose_declared)
-         VALUES ($1, $2, 'tool_call', $3, 'success', false, 'chain_verifier_integration_test')`,
+         VALUES ($1, $2, 'tool_call', $3, 'allowed', false, 'chain_verifier_integration_test')`,
         [personaId, sessionId, `chain_verifier_seed_${i}`],
       );
     }

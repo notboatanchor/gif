@@ -28,6 +28,7 @@ export interface ScopeDefinition {
 export type PersonaStatus = 'active' | 'suspended' | 'revoked' | 'expired';
 export type GovernanceReviewStatus = 'auto_approved' | 'pending' | 'approved';
 export type EnforcementLayer = 'mcp_validation' | 'synthesis_gate' | 'export_gate';
+export type AuditOutcome = 'allowed' | 'denied' | 'deferred' | 'error';
 export type PersonaValidationResult = {
     valid: true;
     persona: Persona;
@@ -83,7 +84,7 @@ export declare function createEnforcement(pool: Pool): {
         sessionId: string | null;
         eventType: string;
         toolName: string;
-        outcome: string;
+        outcome: AuditOutcome;
         sourceRef?: string;
         sourcesActed?: string[];
         flagged?: boolean;

@@ -8,7 +8,7 @@ export declare const logAuditEvent: (params: {
     sessionId: string | null;
     eventType: string;
     toolName: string;
-    outcome: string;
+    outcome: import("./enforcement.js").AuditOutcome;
     sourceRef?: string;
     sourcesActed?: string[];
     flagged?: boolean;

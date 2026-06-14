@@ -54,7 +54,7 @@ export async function executeSessionStart(args, persona, _sessionId) {
         sessionId: newSessionId,
         eventType: 'session_start',
         toolName: 'session_start',
-        outcome: 'success',
+        outcome: 'allowed',
         purposeDeclared: persona.purpose,
     });
     return {
