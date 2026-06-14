@@ -48,9 +48,9 @@ const { Pool } = pg;
 // Pure core — no DB dependency; importable by .mjs tests without a build step
 // ---------------------------------------------------------------------------
 /**
- * Canonical-form string normalization (gif-audit/1): Unicode NFC + trim, reject
- * control characters, cap length at 8192. Applied to every protected string
- * value before serialization.
+ * Canonical-form string normalization (gif-audit/1 and /2): Unicode NFC + trim,
+ * reject control characters, cap length at 8192. Applied to every protected
+ * string value before serialization.
  *
  * Guarded against drift by the known-answer test in test_chain_verifier.mjs,
  * which pins this canonicalizer to the vendor-neutral reference vectors.
@@ -74,11 +74,12 @@ export function normalizeString(s) {
     return n;
 }
 /**
- * Canonicalize (gif-audit/1): deterministic JSON with keys sorted
- * lexicographically at every level, no insignificant whitespace, strings
+ * Canonicalize (shared by gif-audit/1 and /2): deterministic JSON with keys
+ * sorted lexicographically at every level, no insignificant whitespace, strings
  * NFC-normalized + trimmed, null as the literal token `null`, booleans as
- * true/false. Byte-identical to the DB trigger's manual JSON build and to a
- * plain `sha256sum` of the same canonical string.
+ * true/false. The per-version shape is chosen by buildBody / buildBodyV2; this
+ * serializer is version-agnostic. Byte-identical to the DB trigger's manual
+ * JSON build and to a plain `sha256sum` of the same canonical string.
  */
 export function canonicalize(v) {
     if (v === null)
@@ -127,16 +128,57 @@ export function buildBody(row, previousHash) {
     };
 }
 /**
+ * Assemble the gif-audit/2 canonical body for a row (event_hash excluded). Maps
+ * gif's stored columns to the canonical keys (persona_id → principal_id,
+ * invoked_by_persona_id → invoked_by_principal_id) under the single
+ * `caller-governance` extension. Key insertion order is irrelevant —
+ * canonicalize sorts every level. Must stay byte-identical to the migration-015
+ * trigger's manual preimage build.
+ */
+export function buildBodyV2(row, previousHash) {
+    return {
+        event_id: row.event_id,
+        event_type: row.event_type,
+        extensions: {
+            'caller-governance': {
+                flagged: row.flagged,
+                // ?? null on every nullable field: canonicalize() drops undefined keys
+                // but the trigger always emits the literal null token (COALESCE), so a
+                // hand-built row with an undefined field must coerce to null to stay
+                // byte-identical to the trigger. The DB fetch yields null, never
+                // undefined, so this is a no-op on the live path.
+                invoked_by_principal_id: row.invoked_by_persona_id ?? null,
+                purpose_declared: row.purpose_declared ?? null,
+                session_id: row.session_id ?? null,
+            },
+        },
+        occurred_at: row.occurred_at,
+        outcome: row.outcome,
+        previous_hash: previousHash,
+        principal_id: row.persona_id,
+        tool_name: row.tool_name ?? null,
+    };
+}
+/**
  * Recompute the SHA-256 event_hash for a row in its stored canonical form,
- * using the row's own stored previous_hash as the chain link (the value the
+ * selecting the canonicalization rule by the row's own stamped canon_version
+ * and using the row's stored previous_hash as the chain link (the value the
  * trigger used). Returns null for an unrecognized canon_version — a row written
- * under a newer canonical form cannot be re-verified here and must not be
- * reported as tampered (forward-safety).
+ * under a newer/unknown canonical form cannot be re-verified here and must not
+ * be reported as tampered (forward-safety). gif-audit/1 rows predate the /2
+ * re-cut (migration 015) and still verify under the /1 rule.
  */
 export function recomputeHash(row) {
-    if (row.canon_version !== 'gif-audit/1')
+    let preimage;
+    if (row.canon_version === 'gif-audit/2') {
+        preimage = canonicalize(buildBodyV2(row, row.previous_hash));
+    }
+    else if (row.canon_version === 'gif-audit/1') {
+        preimage = canonicalize(buildBody(row, row.previous_hash));
+    }
+    else {
         return null;
-    const preimage = canonicalize(buildBody(row, row.previous_hash));
+    }
     return createHash('sha256').update(preimage, 'utf8').digest('hex');
 }
 /**
@@ -333,7 +375,7 @@ async function fetchPartitions(pool) {
         // Fetch all rows in this partition, including NULL event_hash rows
         // (legacy pre-006 rows) so we can count them. Explicit column list; no
         // SELECT *. occurred_at is rendered with the SAME to_char(...'MS'...)
-        // expression the migration-014 trigger uses, so the verifier consumes a
+        // expression the migration-015 trigger uses, so the verifier consumes a
         // byte-identical timestamp string by construction. flagged is fetched as a
         // real boolean (the canonicalizer needs true/false, not "true"/"false").
         const rowsResult = await pool.query(`SELECT event_id::text,

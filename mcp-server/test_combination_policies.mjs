@@ -212,8 +212,8 @@ await adminPool.query(
   `INSERT INTO gif.audit_events
      (persona_id, session_id, event_type, outcome, sources_touched)
    VALUES
-     ($1, $2, 'tool_call', 'success', '["alpha"]'::jsonb),
-     ($1, $2, 'tool_call', 'success', '["bravo"]'::jsonb)`,
+     ($1, $2, 'tool_call', 'allowed', '["alpha"]'::jsonb),
+     ($1, $2, 'tool_call', 'allowed', '["bravo"]'::jsonb)`,
   [testPersonaId, sessionId]
 );
 

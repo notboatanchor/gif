@@ -130,7 +130,7 @@ try {
   await pgPool.query(
     `INSERT INTO gif.audit_events
        (persona_id, event_type, tool_name, outcome, flagged, occurred_at)
-     VALUES ($1, 'tool_call', 'test_retention', 'success', false, '2099-01-15 12:00:00+00')`,
+     VALUES ($1, 'tool_call', 'test_retention', 'allowed', false, '2099-01-15 12:00:00+00')`,
     [personaId]
   );
 
@@ -232,7 +232,7 @@ try {
     await pgPool.query(
       `INSERT INTO gif.audit_events
          (persona_id, session_id, event_type, tool_name, outcome, flagged, occurred_at)
-       VALUES ($1, $2, 'tool_call', 'test_future_partition', 'success', false, '2026-07-15 12:00:00+00')`,
+       VALUES ($1, $2, 'tool_call', 'test_future_partition', 'allowed', false, '2026-07-15 12:00:00+00')`,
       [personaId, futureSessionId]
     );
     pass('INSERT into audit_events_2026_07 succeeds');

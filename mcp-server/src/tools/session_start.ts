@@ -76,7 +76,7 @@ export async function executeSessionStart(
     sessionId:       newSessionId,
     eventType:       'session_start',
     toolName:        'session_start',
-    outcome:         'success',
+    outcome:         'allowed',
     purposeDeclared: persona.purpose,
   });
 

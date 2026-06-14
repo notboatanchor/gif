@@ -89,6 +89,18 @@ export type EnforcementLayer =
   | 'synthesis_gate'
   | 'export_gate';
 
+// Closed abstract disposition enum for audit_events.outcome under the
+// gif-audit/2 canonical form. Domain reason codes live in event_type / the
+// extension, not here. Typed at the emission boundary so a non-vocabulary
+// outcome is a compile error (the DB carries no CHECK — an audit write must
+// never block). The verifier reads outcome as a free `string` because it must
+// accept historical /1 values (e.g. 'success') verbatim.
+export type AuditOutcome =
+  | 'allowed'
+  | 'denied'
+  | 'deferred'
+  | 'error';
+
 export type PersonaValidationResult =
   | { valid: true;  persona: Persona }
   | { valid: false; reason: PersonaInvalidReason; message: string };
@@ -177,7 +189,7 @@ export function createEnforcement(pool: Pool) {
       sessionId:        string | null;
       eventType:        string;
       toolName:         string;
-      outcome:          string;
+      outcome:          AuditOutcome;
       sourceRef?:       string;
       sourcesActed?:    string[];
       flagged?:         boolean;
@@ -483,7 +495,7 @@ async function _logAuditEvent(
     sessionId:        string | null;
     eventType:        string;
     toolName:         string;
-    outcome:          string;
+    outcome:          AuditOutcome;
     sourceRef?:       string;
     sourcesActed?:    string[];
     flagged?:         boolean;

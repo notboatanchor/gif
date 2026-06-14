@@ -108,7 +108,7 @@ export async function executeSessionClose(
       sessionId:       auditSessionId,
       eventType:       'session_rejected_closed',
       toolName:        'session_close',
-      outcome:         'rejected',
+      outcome:         'denied',
       sourceRef:       rejection,
       purposeDeclared: persona.purpose,
     });
@@ -146,7 +146,7 @@ export async function executeSessionClose(
     sessionId:       gif_session_id,
     eventType:       'session_close',
     toolName:        'session_close',
-    outcome:         'success',
+    outcome:         'allowed',
     purposeDeclared: persona.purpose,
   });
 

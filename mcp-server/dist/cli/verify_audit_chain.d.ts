@@ -37,6 +37,29 @@ export interface CanonicalBody {
     };
     tool_name: string | null;
 }
+/**
+ * The gif-audit/2 canonical body. `profile` + `profile_data` are replaced by an
+ * `extensions` keyed object (type id → body); gif emits exactly one entry,
+ * `caller-governance`. `outcome` carries the abstract disposition enum
+ * (allowed | denied | deferred | error). event_hash excluded from the preimage.
+ */
+export interface CanonicalBodyV2 {
+    event_id: string;
+    event_type: string;
+    extensions: {
+        'caller-governance': {
+            flagged: boolean;
+            invoked_by_principal_id: string | null;
+            purpose_declared: string | null;
+            session_id: string | null;
+        };
+    };
+    occurred_at: string;
+    outcome: string;
+    previous_hash: string | null;
+    principal_id: string;
+    tool_name: string | null;
+}
 /** A single row from gif.audit_chain_anchors. */
 export interface AnchorRow {
     anchor_id: string;
@@ -79,9 +102,9 @@ export interface ChainVerifyResult {
     ok: boolean;
 }
 /**
- * Canonical-form string normalization (gif-audit/1): Unicode NFC + trim, reject
- * control characters, cap length at 8192. Applied to every protected string
- * value before serialization.
+ * Canonical-form string normalization (gif-audit/1 and /2): Unicode NFC + trim,
+ * reject control characters, cap length at 8192. Applied to every protected
+ * string value before serialization.
  *
  * Guarded against drift by the known-answer test in test_chain_verifier.mjs,
  * which pins this canonicalizer to the vendor-neutral reference vectors.
@@ -95,11 +118,12 @@ export interface ChainVerifyResult {
 export declare const MAX_FIELD_LEN = 8192;
 export declare function normalizeString(s: string): string;
 /**
- * Canonicalize (gif-audit/1): deterministic JSON with keys sorted
- * lexicographically at every level, no insignificant whitespace, strings
+ * Canonicalize (shared by gif-audit/1 and /2): deterministic JSON with keys
+ * sorted lexicographically at every level, no insignificant whitespace, strings
  * NFC-normalized + trimmed, null as the literal token `null`, booleans as
- * true/false. Byte-identical to the DB trigger's manual JSON build and to a
- * plain `sha256sum` of the same canonical string.
+ * true/false. The per-version shape is chosen by buildBody / buildBodyV2; this
+ * serializer is version-agnostic. Byte-identical to the DB trigger's manual
+ * JSON build and to a plain `sha256sum` of the same canonical string.
  */
 export declare function canonicalize(v: unknown): string;
 /**
@@ -111,11 +135,22 @@ export declare function canonicalize(v: unknown): string;
  */
 export declare function buildBody(row: AuditRow, previousHash: string | null): CanonicalBody;
 /**
+ * Assemble the gif-audit/2 canonical body for a row (event_hash excluded). Maps
+ * gif's stored columns to the canonical keys (persona_id → principal_id,
+ * invoked_by_persona_id → invoked_by_principal_id) under the single
+ * `caller-governance` extension. Key insertion order is irrelevant —
+ * canonicalize sorts every level. Must stay byte-identical to the migration-015
+ * trigger's manual preimage build.
+ */
+export declare function buildBodyV2(row: AuditRow, previousHash: string | null): CanonicalBodyV2;
+/**
  * Recompute the SHA-256 event_hash for a row in its stored canonical form,
- * using the row's own stored previous_hash as the chain link (the value the
+ * selecting the canonicalization rule by the row's own stamped canon_version
+ * and using the row's stored previous_hash as the chain link (the value the
  * trigger used). Returns null for an unrecognized canon_version — a row written
- * under a newer canonical form cannot be re-verified here and must not be
- * reported as tampered (forward-safety).
+ * under a newer/unknown canonical form cannot be re-verified here and must not
+ * be reported as tampered (forward-safety). gif-audit/1 rows predate the /2
+ * re-cut (migration 015) and still verify under the /1 rule.
  */
 export declare function recomputeHash(row: AuditRow): string | null;
 /**

@@ -311,8 +311,8 @@ if (!mintedSessionId) {
          `row_count=${readParsed.row_count}`);
   } else {
     const row = readParsed.rows[0];
-    if (row.event_type !== 'session_start' || row.outcome !== 'success') {
-      fail('C1.5 — audit event must be session_start / success',
+    if (row.event_type !== 'session_start' || row.outcome !== 'allowed') {
+      fail('C1.5 — audit event must be session_start / allowed',
            `got event_type=${row.event_type}, outcome=${row.outcome}`);
     } else {
       pass('C1.5 — exactly one session_start audit event linked to the new session_id');
