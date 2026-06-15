@@ -2,6 +2,17 @@
 
 **Status:** Accepted
 **Date:** 2026-05-24
+**Amended:**
+
+- 2026-06-15 — SEP-1299 status corrected in "What This ADR Does Not
+  Decide." SEP-1299 is not a Draft SEP that may advance; it is GitHub
+  issue #1299 (pre-SEP-1850 numbering), now `closed`, and did not land
+  in the 2026-07-28 RC. The deferred transport-session correlation
+  column is re-gated on an equivalent client-to-session binding
+  mechanism being standardized, not on "SEP-1299 leaving Draft." No
+  decision in this ADR changed. Source: `gh issue view 1299 --repo
+  modelcontextprotocol/modelcontextprotocol` (2026-06-15) — state
+  CLOSED, closed 2025-09-02.
 
 ## Decision
 
@@ -292,8 +303,10 @@ gains the following entries in `docs/migrations/v0.1-to-v0.2.md`:
 - **Per-persona TTL.** Deferred per GIF-020 §C5. Would land as an
   additive column (`personas.session_ttl_seconds` or a similar
   override) in a future ADR.
-- **SEP-1299 transport-session correlation column.** Deferred. Would
-  land additively if SEP-1299 leaves Draft.
+- **Transport-session correlation column.** Deferred. SEP-1299 (the
+  client-session-binding proposal, GitHub issue #1299) is closed and
+  did not land in the RC; this column would land additively if an
+  equivalent client-to-session binding mechanism is standardized.
 - **SEP-414 W3C Trace Context capture column.** Deferred. Could use
   `invocation_context` JSONB or land as a dedicated column; choice
   depends on whether trace correlation becomes a queryable predicate

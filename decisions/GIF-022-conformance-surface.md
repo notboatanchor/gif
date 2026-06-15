@@ -30,6 +30,18 @@
   guarantee, verified out-of-band by
   `mcp-server/src/cli/verify_audit_chain.ts`, not via an MCP surface.
   No conformance-surface MUST changed.
+- 2026-06-15 — SEP-2484 status corrected. SEP-2484 is now `Final`
+  (ratified / in force), not Draft, and the conformance-artifact
+  format it gates is published: a TypeScript conformance scenario
+  plus a `sep-NNNN.yaml` traceability file (every MUST / MUST NOT /
+  SHOULD / SHOULD NOT mapped to a check or a documented exclusion),
+  scaffolded by `npx @modelcontextprotocol/conformance new-scenario
+  --sep <n>`. The "SEP-2484 alignment" section and the consequence
+  note that assumed Draft status are updated to match. No
+  conformance-surface MUST changed. Source: live read of SEP-2484 at
+  `modelcontextprotocol/modelcontextprotocol@main`,
+  `seps/2484-conformance-tests-required-for-final-seps.md` (2026-06-15)
+  — `Status: Final`, Type: Process, Sponsor: None.
 
 ## Decision
 
@@ -76,15 +88,17 @@ are imminent. D5 is therefore forward-looking. Its value is twofold:
 ### SEP-2484 alignment
 
 SEP-2484 (conformance suite) is a Final-status gate for MCP Standards
-Track work and was the F7 driver behind GIF-018. SEP-2484 has not yet
-specified format or structure for conformance test harnesses; this ADR
-does not assume one. The MUSTs below are stated as behavioral
-requirements observable through the MCP tool surface (`tools/list`
-introspection, tool dispatch, response shapes) and the audit-trail
-read surface (the `db_read` tool with `table = 'audit_events'`, gated by
-the audit-class read scope).
-When SEP-2484 evolves to specify harness conventions, those will land
-additively in a follow-on ADR; nothing in GIF-022 forecloses them.
+Track work and was the F7 driver behind GIF-018. SEP-2484 (now `Final`)
+specifies the conformance-artifact format — a TypeScript scenario plus
+a `sep-NNNN.yaml` traceability file in the `modelcontextprotocol/conformance`
+repository; this ADR does not adopt that format directly. The MUSTs
+below are stated as behavioral requirements observable through the MCP
+tool surface (`tools/list` introspection, tool dispatch, response
+shapes) and the audit-trail read surface (the `db_read` tool with
+`table = 'audit_events'`, gated by the audit-class read scope).
+Aligning this surface to SEP-2484's harness conventions lands
+additively in a follow-on ADR (the deferred `gif-spec` extraction);
+nothing in GIF-022 forecloses it.
 
 ### Scope boundary
 
@@ -406,11 +420,11 @@ single referenceable specification.
 - **Backward-conformance with v0.1.** v0.1 had no equivalent
   surface; v0.2 conformance is a clean break per M4 (no silent
   fallback).
-- **SEP-2484 alignment specifics.** When SEP-2484 leaves Draft and
-  publishes harness conventions, a follow-on ADR aligns this
-  surface with those conventions if they require changes. None of
-  the MUSTs above are expected to soften under that alignment;
-  they may be reorganized or relabeled.
+- **SEP-2484 alignment specifics.** SEP-2484 is `Final` and its
+  harness conventions are published; a follow-on ADR (the deferred
+  `gif-spec` extraction) aligns this surface with those conventions
+  where they require changes. None of the MUSTs above are expected to
+  soften under that alignment; they may be reorganized or relabeled.
 
 ## Non-Negotiables Touched
 
