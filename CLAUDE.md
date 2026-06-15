@@ -93,6 +93,27 @@ and tamper-evidence guarantees; the review gate is mandatory for them, not
 optional. Do not merge enforcement/audit/schema work on an in-session "green"
 alone — verify on a clean install.
 
+**Audit canonical form is byte-identical across all three implementations.** The
+PG trigger (`schema/0NN_audit_canonical_json*.sql`), the `verify_audit_chain.ts`
+verifier (`buildBody*`), and the `.mjs` test-harness replicas must produce
+byte-identical canonical preimages — the hash chain's tamper-evidence is only as
+trustworthy as `emit ≡ verify`. Any change to canonicalization updates all three
+sites together and reproduces the sealed KAT before merge (the same silent-drift
+hazard as the migration apply-paths rule below). Never backfill or rewrite
+`canon_version` on existing rows — historical rows verify under the version they
+were stamped with.
+
+**Structural claims about the code cite their source.** Any assertion that the
+code drifts, mismatches, is broken, or that a test vector equals a given digest
+— recorded in an ADR, a code comment, a doc, an issue, a commit message, or
+project state — must carry an inline source citation (commit SHA + `file:line`,
+or the external preimage) in the same edit that records it. An uncited
+structural claim is marked unverified, not stated as fact. The review-before-merge
+gate above catches unverified *code*; it does not catch a claim entered as
+prose. A misread "`GovernanceReviewStatus` enum drift" claim, recorded without
+checking the type definition, rode ~15 sessions into a public conformance
+comment before it was caught (retracted PR #32, 2026-06-12).
+
 ---
 
 ## Compliance Hardening Roadmap
@@ -145,6 +166,10 @@ the canonical sequence automatically — no project-local copy needed.
 - A new migration must be wired into **both** apply-paths — `scripts/install.sh`
   (`GIF_MIGRATIONS`) and `ops/docker/init-db.sh` (`apply_migration` sequence).
   These are parallel and drift silently when only one is updated.
+- Caller-supplied SQL identifiers (table / column names) route through
+  `mcp-server/src/tools/sql-identifier.ts` (`quoteIdentifier` = validate +
+  escape); values are always parameterized (`$1, $2, …`). Never interpolate
+  caller input as a bare `"${x}"` — it is an injection vector (fixed PR #29).
 
 **TypeScript**
 - Strict mode enabled
