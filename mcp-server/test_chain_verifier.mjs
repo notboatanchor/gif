@@ -77,7 +77,8 @@ function normalizeString(s) {
   if (/[\u0000-\u001f\u007f]/.test(s)) {
     throw new Error('control character in protected string field');
   }
-  const n = s.normalize('NFC').trim();
+  // Trim ASCII space (U+0020) only — matches PG btrim, not JS .trim().
+  const n = s.normalize('NFC').replace(/^ +| +$/g, '');
   if (n.length > MAX_FIELD_LEN) {
     throw new Error('protected string field exceeds length cap');
   }
@@ -478,6 +479,64 @@ const KAT_CG2_DIGEST = 'd494769c1ae442ea88dd190068747abf63c0568a3b856f85791b1a50
 }
 
 // ---------------------------------------------------------------------------
+// Test 1(0c): trim-charset parity — the canonicalizer trims ASCII space (U+0020)
+//             ONLY, matching the DB trigger's btrim(normalize(x,NFC)). Non-control
+//             Unicode whitespace (NBSP, ideographic space, …) is significant
+//             content and is preserved. Regression guard for the
+//             .trim() → replace(/^ +| +$/g,'') fix: JS .trim() strips the full
+//             Unicode whitespace set, so a value with bordering NBSP would hash
+//             one way on emit (PG btrim keeps it) and another on verify — a false
+//             tamper flag. The live emit-vs-verify proof is in Part 2.
+// ---------------------------------------------------------------------------
+
+{
+  // ASCII space (U+0020) IS trimmed — same as PG btrim.
+  if (normalizeString('  diligence read  ') === 'diligence read') {
+    pass('(0c) trim-charset: bordering ASCII space (U+0020) is trimmed');
+  } else {
+    fail('(0c) trim-charset: bordering ASCII space (U+0020) is trimmed',
+         `got ${JSON.stringify(normalizeString('  diligence read  '))}`);
+  }
+
+  // NBSP (U+00A0) is NOT trimmed — significant content, matching PG btrim.
+  const nbsp = '\u00A0reconcile\u00A0';
+  if (normalizeString(nbsp) === nbsp) {
+    pass('(0c) trim-charset: bordering NBSP (U+00A0) is preserved (matches PG btrim)');
+  } else {
+    fail('(0c) trim-charset: bordering NBSP (U+00A0) is preserved',
+         `got ${JSON.stringify(normalizeString(nbsp))}`);
+  }
+
+  // Ideographic space (U+3000) likewise preserved.
+  const ideo = '\u3000x\u3000';
+  if (normalizeString(ideo) === ideo) {
+    pass('(0c) trim-charset: bordering ideographic space (U+3000) is preserved');
+  } else {
+    fail('(0c) trim-charset: bordering ideographic space (U+3000) is preserved',
+         `got ${JSON.stringify(normalizeString(ideo))}`);
+  }
+
+  // Interior ASCII spaces are untouched; only the borders are trimmed.
+  if (normalizeString(' a b ') === 'a b') {
+    pass('(0c) trim-charset: interior ASCII spaces are preserved');
+  } else {
+    fail('(0c) trim-charset: interior ASCII spaces are preserved',
+         `got ${JSON.stringify(normalizeString(' a b '))}`);
+  }
+
+  // Trailing-ONLY ASCII space must be trimmed. This isolates the regex `g` flag:
+  // without it, .replace(/^ +| +$/, '') strips only the first (leading) match and
+  // leaves the trailing run, diverging from PG btrim. Guards against a future
+  // refactor dropping the flag.
+  if (normalizeString('reconcile  ') === 'reconcile') {
+    pass('(0c) trim-charset: trailing-only ASCII space is trimmed (g-flag guard)');
+  } else {
+    fail('(0c) trim-charset: trailing-only ASCII space is trimmed (g-flag guard)',
+         `got ${JSON.stringify(normalizeString('reconcile  '))}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Test 1(a): clean 3-row chain → 0 anomalies
 // ---------------------------------------------------------------------------
 
@@ -838,6 +897,44 @@ if (!liveSkipped) {
     } else {
       fail('live integration: row3.previous_hash === row2.event_hash',
            `r3.previous_hash=${r3.previous_hash}, r2.event_hash=${r2.event_hash}`);
+    }
+
+    // --- Trim-charset parity (live emit-vs-verify proof). A purpose_declared
+    // with bordering NBSP (U+00A0) must round-trip clean: PG btrim keeps the NBSP
+    // on emit, and the verifier now keeps it on verify (U+0020-only trim), so the
+    // recomputed hash matches the stored hash. Pre-fix, JS .trim() stripped the
+    // NBSP and this row would false-flag as a tamper mismatch.
+    const nbspPurpose = '\u00A0reconcile invoices\u00A0';
+    const nbspIns = await pool.query(
+      `INSERT INTO gif.audit_events
+         (persona_id, session_id, event_type, tool_name, outcome, flagged, purpose_declared)
+       VALUES ($1, $2, 'tool_call', 'nbsp_trim_parity', 'allowed', false, $3)
+       RETURNING event_id::text`,
+      [personaId, sessionId, nbspPurpose],
+    );
+    const nbspRowRes = await pool.query(
+      `SELECT event_id::text,
+              to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
+              persona_id::text, session_id::text, event_type, tool_name, outcome,
+              flagged, purpose_declared, invoked_by_persona_id::text,
+              canon_version, event_hash, previous_hash
+       FROM gif.audit_events WHERE event_id = $1`,
+      [nbspIns.rows[0].event_id],
+    );
+    const nbspRow = nbspRowRes.rows[0];
+
+    if (nbspRow.purpose_declared === nbspPurpose) {
+      pass('live integration: NBSP-bordered purpose_declared stored verbatim (PG keeps NBSP)');
+    } else {
+      fail('live integration: NBSP-bordered purpose_declared stored verbatim',
+           `stored ${JSON.stringify(nbspRow.purpose_declared)}`);
+    }
+
+    if (recomputeHash(nbspRow) === nbspRow.event_hash) {
+      pass('live integration: NBSP purpose row — verifier hash matches trigger hash (trim-charset parity)');
+    } else {
+      fail('live integration: NBSP purpose row — verifier hash matches trigger hash',
+           `recomputed ${recomputeHash(nbspRow)}\n    stored     ${nbspRow.event_hash}`);
     }
 
     // Cleanup: close the session (gif_app can UPDATE sessions.ended_at;

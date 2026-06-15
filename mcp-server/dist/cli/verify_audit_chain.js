@@ -48,18 +48,27 @@ const { Pool } = pg;
 // Pure core — no DB dependency; importable by .mjs tests without a build step
 // ---------------------------------------------------------------------------
 /**
- * Canonical-form string normalization (gif-audit/1 and /2): Unicode NFC + trim,
- * reject control characters, cap length at 8192. Applied to every protected
- * string value before serialization.
+ * Canonical-form string normalization (gif-audit/1 and /2): Unicode NFC, then
+ * trim leading/trailing ASCII space (U+0020) only, reject control characters,
+ * cap length at 8192. Applied to every protected string value before
+ * serialization.
+ *
+ * Trim charset = U+0020 only, matching the DB trigger's btrim(normalize(x,NFC)).
+ * JS `.trim()` strips the full Unicode whitespace set (NBSP, ideographic space,
+ * the U+2000–U+200A range, etc.); DB `btrim` strips ASCII space only — so a value
+ * with leading/trailing non-control Unicode whitespace would hash one way on emit
+ * and another on verify, a false tamper flag. `replace(/^ +| +$/g, '')` pins both
+ * sides to U+0020.
  *
  * Guarded against drift by the known-answer test in test_chain_verifier.mjs,
  * which pins this canonicalizer to the vendor-neutral reference vectors.
  *
- * Parity note: the DB trigger's norm() does NFC + trim but does NOT reject
- * control chars or cap length (it must never throw — audit-never-throws). For
- * gif's controlled-vocabulary / persona.purpose inputs the two agree byte-for-
- * byte; a string that trips this throw is surfaced as `uncheckable`, never as
- * tamper.
+ * Parity note: the DB trigger's norm() does NFC + the same U+0020 trim, but does
+ * NOT reject control chars or cap length (it must never throw — audit-never-
+ * throws). For gif's controlled-vocabulary / persona.purpose inputs the two agree
+ * byte-for-byte; a string that trips the control-char/cap throw here is surfaced
+ * as `uncheckable`, never as tamper. Closing that emit-vs-verify divergence (the
+ * `uncheckable` hole) is a tracked follow-up, separate from this trim-charset fix.
  */
 export const MAX_FIELD_LEN = 8192;
 export function normalizeString(s) {
@@ -67,7 +76,9 @@ export function normalizeString(s) {
     if (/[\u0000-\u001f\u007f]/.test(s)) {
         throw new Error('control character in protected string field');
     }
-    const n = s.normalize('NFC').trim();
+    // Trim ASCII space (U+0020) only — matches PG btrim; NOT JS .trim() (full
+    // Unicode whitespace), which would diverge from the trigger on e.g. NBSP.
+    const n = s.normalize('NFC').replace(/^ +| +$/g, '');
     if (n.length > MAX_FIELD_LEN) {
         throw new Error('protected string field exceeds length cap');
     }

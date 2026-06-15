@@ -66,7 +66,8 @@ function normalizeString(str) {
   if (/[\u0000-\u001f\u007f]/.test(str)) {
     throw new Error('control character in protected string field');
   }
-  const n = str.normalize('NFC').trim();
+  // Trim ASCII space (U+0020) only — matches PG btrim, not JS .trim().
+  const n = str.normalize('NFC').replace(/^ +| +$/g, '');
   if (n.length > MAX_FIELD_LEN) {
     throw new Error('protected string field exceeds length cap');
   }
