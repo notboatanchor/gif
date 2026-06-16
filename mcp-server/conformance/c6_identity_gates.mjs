@@ -47,20 +47,22 @@
 //            puts `personas` in permitted_sources so the denial isolates the
 //            admin_read *action* gate, not the source allowlist — proving the
 //            table is not reachable via generic read.
-//   3. C6.3 — dispatch rejects any persona with
-//      governance_review_status != 'approved'. Isolated from C1.6 (which covers
+//   3. C6.3 — dispatch passes only auto_approved/approved personas and rejects
+//      any other governance_review_status. Isolated from C1.6 (which covers
 //      the mint-time session_start path): a persona is minted while approved,
-//      then flipped to a non-approved status, then a GOVERNED dispatch is
-//      attempted on the still-valid handle. A before/after delta witnesses that
-//      the governance flip — re-validated at dispatch (index.ts validatePersona
-//      runs on every tool call before session validation) — is the cause.
+//      then (a) flipped to auto_approved — still dispatches — and (b) flipped to
+//      pending — rejected. A before/after delta witnesses that the governance
+//      state — re-validated at dispatch (index.ts validatePersona runs on every
+//      tool call before session validation) — is the cause.
 //
 // Implementation note: the TypeScript GovernanceReviewStatus type
 // (enforcement.ts) and the DB ENUM governance_review_status
 // (schema/001_gif_core.sql) define the same three values —
-// 'auto_approved' | 'pending' | 'approved'. C6.3 flips to 'pending' (DB-valid,
-// != 'approved'); the gate (enforcement.ts: `!== 'approved'`) treats every
-// non-'approved' value identically, so the MUST is exercised regardless.
+// 'auto_approved' | 'pending' | 'approved'. Per ADR-017 the gate is an explicit
+// auto_approved/approved allowlist (enforcement.ts), so auto_approved (the
+// schema default) and approved pass while pending — and any unrecognized
+// state — is rejected (closed by default). C6.3 exercises both the
+// auto_approved pass and the pending reject.
 // Careful not to conflate this with the adjacent PersonaStatus type
 // ('active' | 'suspended' | 'revoked' | 'expired') — that is the persona
 // lifecycle vocabulary, not the review-status vocabulary.
@@ -298,20 +300,21 @@ console.log('[c6] Case 2 — C6.2: personas reachable only via admin_read\n');
 }
 
 // ---------------------------------------------------------------------------
-// Case 3 — C6.3: dispatch rejects any persona with
-// governance_review_status != 'approved'.
+// Case 3 — C6.3: dispatch passes auto_approved/approved personas and rejects
+// any other governance_review_status (e.g. pending).
 //
 // Distinct from C1.6 (mint-time session_start rejection). Here the persona is
-// approved at mint, mints a valid session, then is flipped to a non-approved
-// status. A subsequent GOVERNED dispatch on the still-valid handle must be
-// rejected — validatePersona runs on every tool call (index.ts) before session
-// validation, so the governance gate is re-checked at dispatch.
+// approved at mint, mints a valid session, then is flipped (a) to auto_approved
+// — dispatch still succeeds — and (b) to pending — dispatch is rejected. Each
+// GOVERNED dispatch on the still-valid handle re-validates the persona —
+// validatePersona runs on every tool call (index.ts) before session validation,
+// so the governance gate is re-checked at dispatch.
 //
-// before-flip success + after-flip rejection is the delta that isolates the
-// governance flip as the cause (the handle and scope are otherwise unchanged).
+// The before/after deltas isolate the governance state as the cause (the handle
+// and scope are otherwise unchanged).
 // ---------------------------------------------------------------------------
 
-console.log('[c6] Case 3 — C6.3: dispatch rejects non-approved persona\n');
+console.log('[c6] Case 3 — C6.3: dispatch passes auto_approved/approved, rejects pending\n');
 
 {
   // Before flip: governed dispatch succeeds (witness).
@@ -323,8 +326,32 @@ console.log('[c6] Case 3 — C6.3: dispatch rejects non-approved persona\n');
     fail('C6.3 — pre-flip governed dispatch must succeed (witness for the delta)',
          `isError=${before.isError}, error=${JSON.stringify(beforeParsed.error)}`);
   } else {
-    // Flip governance_review_status to a non-approved value (admin pool, setup-
-    // only mutation). 'pending' is DB-valid and != 'approved'.
+    // C6.3 positive — auto_approved (the schema default that persona_create
+    // produces) must also pass the gate, not only an explicit 'approved'. Flip
+    // to auto_approved and confirm the same governed dispatch still succeeds.
+    // Guards the f344442 regression, where the gate rejected the default state
+    // no shipped path produces.
+    await adminPool.query(
+      `UPDATE gif.personas
+          SET governance_review_status = 'auto_approved'
+        WHERE persona_id = $1`,
+      [revocablePersonaId],
+    );
+    await new Promise(r => setTimeout(r, 200));
+
+    const auto       = await dbRead(revocablePersonaId, revocableSession, 'tool_registry');
+    const autoParsed = parseToolResult(auto);
+
+    if (!auto.isError && Array.isArray(autoParsed.rows)) {
+      pass('C6.3 — auto_approved persona (schema default) dispatches successfully ' +
+           '(allowlist passes auto_approved, not only approved)');
+    } else {
+      fail('C6.3 — auto_approved persona must pass the dispatch gate',
+           `isError=${auto.isError}, error=${JSON.stringify(autoParsed.error)}`);
+    }
+
+    // Flip governance_review_status to 'pending' (review withheld; admin pool,
+    // setup-only mutation) — dispatch must now reject.
     await adminPool.query(
       `UPDATE gif.personas
           SET governance_review_status = 'pending'
@@ -345,9 +372,9 @@ console.log('[c6] Case 3 — C6.3: dispatch rejects non-approved persona\n');
 
     if (afterRejected) {
       pass('C6.3 — governed dispatch rejected (GOVERNANCE_REVIEW_REQUIRED) once the ' +
-           'persona is non-approved, though the same call succeeded while approved');
+           'persona is pending, though the same call succeeded while auto_approved/approved');
     } else {
-      fail('C6.3 — governed dispatch must reject a non-approved persona at dispatch time',
+      fail('C6.3 — governed dispatch must reject a pending persona at dispatch time',
            `isError=${after.isError}, valid=${afterParsed.valid}, reason=${afterParsed.reason}`);
     }
   }

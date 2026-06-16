@@ -152,11 +152,20 @@ async function _validatePersona(pool, personaId) {
             message: `Persona ${personaId} has expired (valid_until: ${persona.valid_until.toISOString()})`,
         };
     }
-    if (persona.governance_review_status !== 'approved') {
+    // ADR-017 stub semantics: governance review is a structural slot for a future
+    // gif-side governance layer. Until it lands, `auto_approved` (the schema
+    // default that every persona_create produces) and `approved` both pass; any
+    // other state — `pending` (review withheld) or an unrecognized value — is
+    // rejected. This is an explicit allowlist, not `=== 'pending'`, so the gate
+    // stays closed by default if the governance ENUM grows before this check is
+    // updated. The prior `!== 'approved'` form rejected the default state no
+    // shipped path produces (the f344442 regression). See GIF-022 §C6.3.
+    if (persona.governance_review_status !== 'auto_approved' &&
+        persona.governance_review_status !== 'approved') {
         return {
             valid: false,
             reason: 'GOVERNANCE_REVIEW_REQUIRED',
-            message: `Persona ${personaId} is not approved for use (governance_review_status: ${persona.governance_review_status})`,
+            message: `Persona ${personaId} is not cleared for dispatch (governance_review_status: ${persona.governance_review_status})`,
         };
     }
     return { valid: true, persona };
