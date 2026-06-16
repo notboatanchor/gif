@@ -63,9 +63,17 @@ making it optional.
 `ALLOWED_READ_TABLES`. It is in `ADMIN_READ_TABLES` and requires the `admin_read`
 action. An AI doing legitimate work has no reason to enumerate other personas.
 
-**`governance_review_status` must be `approved` for dispatch.** `_validatePersona`
-blocks any persona with a status other than `approved`. Do not suggest weakening
-or bypassing this check.
+**`governance_review_status` gates dispatch via an `auto_approved`/`approved`
+allowlist.** Per ADR-017 the governance review is a structural stub that
+auto-approves until a future gif-side governance layer is installed.
+`_validatePersona` passes only `auto_approved` (the schema default) and
+`approved`, and rejects everything else — `pending` (review withheld) and any
+unrecognized state (closed by default). Do not narrow the pass set to `approved`
+alone — that rejects the default state no shipped path produces (the f344442
+regression, reconciled in GIF-022 §C6.3). Do not rewrite it as `!= 'pending'`
+either — keep the explicit allowlist so the gate stays closed if the governance
+ENUM grows. When the real governance layer lands, tighten deliberately via an
+ADR, not silently.
 
 **`gif_session_id` is required on every governed tool's `inputSchema`.** Type
 must be `string` with `uuid` format; the dispatcher pre-validates the handle

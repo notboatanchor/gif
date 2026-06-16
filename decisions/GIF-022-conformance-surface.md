@@ -41,6 +41,24 @@
   conformance-surface MUST changed. Source: live read of SEP-2484 at
   `modelcontextprotocol/modelcontextprotocol@main`,
   `seps/2484-conformance-tests-required-for-final-seps.md` (2026-06-15)
+- 2026-06-16 — **§C6.3 normative reconciliation (first normative
+  amendment to this ADR).** C6.3 reworded from "reject
+  `!= 'approved'`" to an explicit `auto_approved`/`approved` allowlist
+  (pass those two; reject `pending` and any unrecognized state, closed
+  by default). The prior form rejected `auto_approved` — the schema
+  default (`schema/001_gif_core.sql`) that every `persona_create`
+  produces, and the pass-through state ADR-017 designed — while no
+  shipped code path ever sets `approved`, so every tool-created persona
+  was rejected at dispatch (mint and governed calls alike). The strict
+  gate entered in commit `f344442` (2026-04-05) without reconciling
+  ADR-017 and was consolidated here unexamined. The gate now passes
+  `auto_approved`/`approved` and rejects everything else, restoring
+  ADR-017's auto-approve-until-installed intent while staying closed by
+  default against future ENUM growth (security-review hardening over a
+  bare `== 'pending'` check) and preserving the future-tightening path
+  (a real governance layer sets `pending`/`approved`). C6.3's positive
+  path now asserts an `auto_approved` persona dispatches; the `pending`
+  reject case is unchanged.
   — `Status: Final`, Type: Process, Sponsor: None.
 
 ## Decision
@@ -297,10 +315,16 @@ exclusions (not-protocol-observable flavor).
   `read` action on `db_read`. An implementation that includes
   `personas` in the application-user readable-table allowlist is
   non-conformant. (CLAUDE.md admin-read gating non-negotiable)
-- **C6.3** Dispatch MUST reject any persona with
-  `governance_review_status != 'approved'`. An implementation
-  that weakens or skips this check is non-conformant. (CLAUDE.md
-  governance-review non-negotiable)
+- **C6.3** Dispatch MUST pass only personas whose
+  `governance_review_status` is `auto_approved` or `approved`, and
+  MUST reject any other value — `pending` (review withheld) or any
+  unrecognized state (closed by default). Per ADR-017 the review gate
+  is a structural stub that auto-approves (`auto_approved`, the schema
+  default) until a future governance layer is installed; `pending` is
+  the reserved "review withheld" state. An implementation that
+  dispatches a `pending` persona, or that passes an unrecognized
+  governance state, is non-conformant. (CLAUDE.md governance-review
+  non-negotiable; ADR-017 stub semantics)
 
 ## Implementation-Defined Behaviors
 
