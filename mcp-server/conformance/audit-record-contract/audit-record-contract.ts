@@ -124,6 +124,12 @@ export type ProfileId = keyof typeof PROFILES;
 
 export const MAX_FIELD_LEN = 8192;
 
+// Recursion bound for canonicalize(): conforming records are shallow (core + one
+// `extensions` level + flat string/bool/null data), so this is far above any valid
+// record. It guards a verifier importing untrusted records against stack exhaustion
+// from hostile deeply-nested input; it changes no canonical output for valid records.
+export const MAX_DEPTH = 64;
+
 export function normalizeString(s: string): string {
   // Control characters are not permitted in a protected string field.
   if (/[\u0000-\u001f\u007f]/.test(s)) {
@@ -143,7 +149,11 @@ export function normalizeString(s: string): string {
 // Object keys are serialized as-is and sorted (registry vocabulary, not
 // normalized); string values are normalized. Numbers remain supported for
 // forward-safety but are excluded by the /2 no-bare-numbers convention.
-export function canonicalize(value: unknown): string {
+export function canonicalize(value: unknown, depth = 0): string {
+  // Bound recursion against hostile deeply-nested input (stack-exhaustion guard).
+  // Conforming records are shallow, so this throws only on pathological nesting and
+  // never alters canonical output for a valid record.
+  if (depth > MAX_DEPTH) throw new Error('protected value nesting exceeds depth cap');
   if (value === null) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') {
@@ -152,12 +162,12 @@ export function canonicalize(value: unknown): string {
   }
   if (typeof value === 'string') return JSON.stringify(normalizeString(value));
   if (Array.isArray(value)) {
-    return '[' + value.map(canonicalize).join(',') + ']';
+    return '[' + value.map((v) => canonicalize(v, depth + 1)).join(',') + ']';
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
-    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(obj[k], depth + 1)).join(',') + '}';
   }
   throw new Error(`uncanonicalizable value of type ${typeof value}`);
 }
