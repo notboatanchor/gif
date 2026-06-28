@@ -48,6 +48,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Audit record contract vectors
+        run: npm run vectors
+
       - name: npm audit (production)
         run: npm audit --omit=dev --audit-level=high
 
