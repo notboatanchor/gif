@@ -22,9 +22,9 @@ in any environment that handles real audit data.
 
 ```bash
 # HTTPS (no SSH key required):
-git clone --branch v0.1.0 https://github.com/notboatanchor/gif.git
+git clone --branch v0.2.0-rc.4 https://github.com/notboatanchor/gif.git
 # Or SSH:
-# git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
+# git clone --branch v0.2.0-rc.4 git@github.com:notboatanchor/gif.git
 
 cd gif
 ```
@@ -109,7 +109,7 @@ PGPASSWORD=<GIF_ADMIN_PASSWORD> psql \
   -c "SELECT migration_name, applied_at FROM gif.schema_migrations ORDER BY applied_at;"
 ```
 
-You should see 12 rows — `001_gif_core.sql` through `012_schema_migrations.sql`.
+You should see 15 rows — `001_gif_core.sql` through `015_audit_canonical_json_v2.sql`.
 
 Verify the MCP server is accepting connections:
 
@@ -126,23 +126,28 @@ Expected response: `{"status":"ok","service":"gif-mcp-server"}`
 In your adopter tool server, add `gif-enforcement` as a pinned git dependency:
 
 ```bash
-npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.1.0"
+npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.0-rc.4"
 ```
 
 This adds the following to your `package.json`:
 
 ```json
 "dependencies": {
-  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.1.0"
+  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.0-rc.4"
 }
 ```
 
-> **Release candidate.** Adopters tracking the MCP 2026-07-28 spec can pin to
-> `#v0.2.0-rc.1` instead. The v0.2 substrate uses the MCP SDK 2.0 split-package
-> layout (ESM-only) and changes the tool-call contract to require an explicit
-> `gif_session_id`. See [`docs/migrations/v0.1-to-v0.2.md`](../../migrations/v0.1-to-v0.2.md)
-> for the full adopter contract — package.json changes, the `@cfworker/json-schema`
-> peer dep, ESM requirement, and `v0.1 → v0.2` import map.
+The v0.2 substrate uses the MCP SDK 2.0 split-package layout (ESM-only —
+your consuming package needs `"type": "module"`) and requires an explicit
+`gif_session_id` argument on every governed tool call. See
+[`docs/migrations/v0.1-to-v0.2.md`](../../migrations/v0.1-to-v0.2.md) for the
+full adopter contract — package.json changes, ESM requirement, session-handle
+threading, and the `v0.1 → v0.2` import map.
+
+> **Legacy (`v0.1.0`).** The `v0.1.0` tag still exists but is not recommended
+> for new installs: it runs on the retired MCP SDK v1 substrate and predates
+> the SQL-identifier hardening on the v0.2 line (PR #29). Existing v0.1.x
+> deployments should upgrade via the migration doc above.
 
 In your server code, inject your own `pg.Pool` into `createEnforcement`. gif
 enforcement runs under whichever credentials your pool uses — do not modify gif
@@ -160,13 +165,17 @@ const pool = new Pool({
   password: process.env.PGPASSWORD,
 });
 
-export const { validatePersona, createSession, closeSession, logAuditEvent }
+export const { validatePersona, validateSessionHandle, createSession,
+               closeSession, logAuditEvent }
   = createEnforcement(pool);
 ```
 
-Your tool handlers call `validatePersona` before executing any tool logic.
-Enforcement happens at the MCP layer — do not duplicate permission checks in
-application code.
+Your tool dispatcher calls `validatePersona`, then `validateSessionHandle` on
+the caller-supplied `gif_session_id`, before executing any tool logic.
+`validateSessionHandle` is the single source of truth for session-handle
+validity (closure precedence, TTL, rejection taxonomy) — do not re-implement
+that check yourself. Enforcement happens at the MCP layer — do not duplicate
+permission checks in application code.
 
 ---
 
@@ -182,8 +191,15 @@ search-only. Granular handlers are what make Persona scope constraints meaningfu
 at the action level.
 
 Each handler follows the same structure:
-1. Zod-validated input schema (what parameters the AI can pass)
-2. `validatePersona` check (enforcement, runs before any application logic)
+1. JSON Schema `inputSchema` declaring what parameters the AI can pass.
+   Every governed tool must include `gif_session_id` (type `string`, format
+   `uuid`) in both `properties` and `required` — the dispatcher rejects calls
+   that omit it before the handler runs. Note that the SDK does not enforce
+   `inputSchema.required` at runtime under the low-level `Server`; add a
+   runtime guard in the handler for each required field.
+2. `validatePersona` + `validateSessionHandle` checks (enforcement, runs in
+   the dispatcher before any application logic — handlers receive the
+   validated `sessionId` as a parameter and trust it)
 3. Application logic (API call, database query, or any other operation)
 4. Response returned through MCP
 
@@ -334,15 +350,28 @@ The CLI prints a single token to stdout. Tokens are valid for 15 minutes from
 issuance. `IDENTITY_HMAC_SECRET` must be set in the environment (source your
 `.env` or export it directly).
 
-**Step 4 — Call `persona_create` with the issuing persona and the token**:
+**Step 4 — Mint a governance session for the bootstrap persona**:
+
+`persona_create` is a governed tool — it requires a `gif_session_id` minted by
+the `session_start` MCP tool. Call `session_start` with:
+
+- `persona_id`: `<BOOTSTRAP_ADMIN_PERSONA_ID>`
+
+Capture the returned `gif_session_id`. One session can carry all the
+`persona_create` calls in this bootstrap — you do not need a fresh session per
+persona. Sessions expire after `GIF_SESSION_TTL_SECONDS` (default 24 hours)
+and can be closed explicitly with `session_close` when you are done.
+
+**Step 5 — Call `persona_create` with the issuing persona, the session, and the token**:
 
 For each persona you want to provision, call the MCP `persona_create` tool with:
 
 - `persona_id`: `<BOOTSTRAP_ADMIN_PERSONA_ID>` (the issuer with `manage_personas`)
+- `gif_session_id`: the handle from Step 4
 - `identity_token`: the token from Step 3
-- `purpose`, `issuing_entity`, `scope_definition`, `valid_until`,
-  `max_delegation_depth`: the new persona's own definition (see the
-  `persona_create` tool schema or `mcp-server/src/tools/persona_create.ts`).
+- `purpose`, `issuing_entity`, `created_by`, `scope_definition`, `valid_until`,
+  and optionally `max_delegation_depth`: the new persona's own definition (see
+  the `persona_create` tool schema or `mcp-server/src/tools/persona_create.ts`).
 
 Each `persona_create` call:
 - consumes one assignment row's token (flips `token_consumed: false→true`)
@@ -350,9 +379,9 @@ Each `persona_create` call:
 - records an audit event with `human_actor_id = <assignment_id>` — linking
   the new persona back to the verified human identity that authorized it
 
-**Step 5 — Ongoing provisioning** (after bootstrap):
+**Step 6 — Ongoing provisioning** (after bootstrap):
 
-To create additional personas later, repeat Steps 2–4 against the bootstrap
+To create additional personas later, repeat Steps 2–5 against the bootstrap
 admin (or any persona you've created with `manage_personas` in its scope).
 Direct-SQL inserts as `gif_admin` are the bootstrap exception — they are not
 the steady-state provisioning path. After the first persona exists, all
@@ -365,7 +394,9 @@ provisioning goes through `persona_create`.
 With gif running and the first persona provisioned, verify the core path
 end-to-end.
 
-**Execute a tool call** through your adopter server with the new persona ID.
+**Execute a tool call** through your adopter server with the new persona ID:
+call `session_start` with the new persona to mint a `gif_session_id`, then
+invoke a governed tool threading that handle as the `gif_session_id` argument.
 
 **Verify the audit event was recorded:**
 
@@ -446,12 +477,21 @@ for f in gif/schema/001_gif_core.sql \
           gif/schema/007_identity_binding.sql \
           gif/schema/008_audit_read_log.sql \
           gif/schema/009_retention_lifecycle.sql \
-          gif/schema/010_combination_policies.sql; do
+          gif/schema/010_combination_policies.sql \
+          gif/schema/011_remove_research_pipeline_tables.sql \
+          gif/schema/012_schema_migrations.sql \
+          gif/schema/013_session_v2_semantics.sql \
+          gif/schema/014_audit_canonical_json.sql \
+          gif/schema/015_audit_canonical_json_v2.sql; do
   PGPASSWORD=<gif_admin_password> psql \
     -h <host> -p <port> -U gif_admin -d <your_database> \
     -v ON_ERROR_STOP=1 -f "$f"
 done
 ```
+
+This list must match the migration sequence in `scripts/install.sh`
+(`GIF_MIGRATIONS`) and `ops/docker/init-db.sh` — if you are on a newer tag,
+check those scripts for migrations added after `015`.
 
 **Verify**
 
@@ -461,7 +501,7 @@ FROM gif.schema_migrations
 ORDER BY applied_at;
 ```
 
-You should see 12 rows. The `gif` schema now coexists with your existing schemas.
+You should see 15 rows. The `gif` schema now coexists with your existing schemas.
 Your existing schemas and their owners are unaffected.
 
 **Configure your MCP server**

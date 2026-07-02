@@ -74,9 +74,9 @@ See [`docs/gif-101.md`](docs/gif-101.md) for a technical walkthrough of the code
 
 ```bash
 # HTTPS (no SSH key required):
-git clone --branch v0.1.0 https://github.com/notboatanchor/gif.git
+git clone --branch v0.2.0-rc.4 https://github.com/notboatanchor/gif.git
 # Or SSH:
-# git clone --branch v0.1.0 git@github.com:notboatanchor/gif.git
+# git clone --branch v0.2.0-rc.4 git@github.com:notboatanchor/gif.git
 
 cd gif
 cp .env.example .env   # fill in passwords and secrets
@@ -111,9 +111,11 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 
 ## Current State
 
-GIF v0.1.0 is the stable substrate (MCP SDK v1). Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite spans 8 test files (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies) and runs on every commit via CI. TypeScript strict mode throughout.
+`v0.2.0-rc.4` is the recommended pin. It runs on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0-beta.1`, ESM-only) and carries the v0.2 governance-session semantics: explicit `gif_session_id` handles minted by `session_start` (the MCP 2026-07-28 spec's server-minted session-handle model, SEP-2567), caller-driven close, and wall-clock TTL. Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies, SQL-identifier safety) plus the six GIF-022 conformance scenarios run on every commit via CI. TypeScript strict mode throughout.
 
-**Release candidate (v0.2 substrate).** `v0.2.0-rc.1` is available for adopters tracking the MCP 2026-07-28 spec. It carries the same enforcement core on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0-alpha.2`), is ESM-only, and adds the v0.2 governance-session semantics (explicit `gif_session_id`, caller-driven close, TTL). See [`docs/migrations/v0.1-to-v0.2.md`](docs/migrations/v0.1-to-v0.2.md) for the full migration contract, including the `@cfworker/json-schema` peer-dep and `"type": "module"` requirements. `v0.2.0-rc.1` will track MCP SDK 2.0 prereleases through the RC window; pin to `^2.0.0` semantics arrive at `v0.2.0` final.
+The RC line tracks MCP SDK 2.0 prereleases through the spec RC window; the pin moves to `^2.0.0` at `v0.2.0` final. The server currently negotiates the `2025-11-25` protocol revision on the wire — serving the `2026-07-28` revision (`server/discover`, cache envelopes) requires the SDK's `createMcpHandler` hosting layer and is queued for `v0.2.0` final.
+
+**Legacy (`v0.1.0`).** `v0.1.0` is the pre-session-handle release on the retired MCP SDK v1 substrate. It is no longer recommended: it predates the SQL-identifier hardening on the v0.2 line (PR #29 — caller-supplied filter and column names reached `db_read`/`db_write` queries unescaped) and receives no backports. Existing v0.1.x adopters should upgrade via [`docs/migrations/v0.1-to-v0.2.md`](docs/migrations/v0.1-to-v0.2.md).
 
 Shipped capabilities:
 
