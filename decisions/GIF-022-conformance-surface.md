@@ -41,6 +41,7 @@
   conformance-surface MUST changed. Source: live read of SEP-2484 at
   `modelcontextprotocol/modelcontextprotocol@main`,
   `seps/2484-conformance-tests-required-for-final-seps.md` (2026-06-15)
+  — `Status: Final`, Type: Process, Sponsor: None.
 - 2026-06-16 — **§C6.3 normative reconciliation (first normative
   amendment to this ADR).** C6.3 reworded from "reject
   `!= 'approved'`" to an explicit `auto_approved`/`approved` allowlist
@@ -59,7 +60,6 @@
   (a real governance layer sets `pending`/`approved`). C6.3's positive
   path now asserts an `auto_approved` persona dispatches; the `pending`
   reject case is unchanged.
-  — `Status: Final`, Type: Process, Sponsor: None.
 - 2026-07-03 — **§C2.7 input-validation boundary (second normative
   amendment).** The missing-handle parenthetical is generalized to
   every required argument: a call rejected by protocol-level input
