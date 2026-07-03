@@ -55,6 +55,7 @@ import http from 'http';
 import { validatePersona } from './persona.js';
 import { logAuditEvent, validateSessionHandle } from './session.js';
 import { TOOL_REGISTRY } from './tools/registry.js';
+import { findMissingRequiredArg } from './tools/arg-guards.js';
 
 const PORT = parseInt(process.env.PORT || '3100');
 
@@ -117,6 +118,21 @@ function createServer() {
         content: [{ type: 'text' as const, text: JSON.stringify({ valid: false, reason: validation.reason, message: validation.message }) }],
         isError: true,
       };
+    }
+
+    // The low-level Server performs no JSON-Schema validation of tool
+    // inputSchemas — enforce `required` presence for every registered tool
+    // here, so no handler depends on DB constraints to catch a missing
+    // argument. Protocol-level InvalidParams with no audit, matching the
+    // C2.2 treatment of a missing gif_session_id. persona_id (above) and
+    // gif_session_id (below, and in-handler for session_close) keep their
+    // dedicated checks.
+    const missingArg = findMissingRequiredArg(toolHandler.definition.inputSchema.required, args);
+    if (missingArg !== null) {
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
+        `${missingArg} is required for ${name}`,
+      );
     }
 
     // skipSession tools (persona_validate, session_start, session_close) —

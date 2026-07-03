@@ -1,0 +1,102 @@
+/*
+ * Copyright 2026 Notboatanchor Labs LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// src/tools/arg-guards.ts
+// =============================================================================
+// Tool-argument runtime guards
+//
+// The low-level MCP `Server` performs no JSON-Schema validation of tool
+// inputSchemas (the SDK's validators wire into the `McpServer` and elicitation
+// paths only) — every constraint a tool declares is enforced here or not at
+// all. Two layers, split by where the failure should surface:
+//
+//   1. findMissingRequiredArg — dispatcher-level presence check over a tool
+//      definition's `inputSchema.required`. A missing required argument is a
+//      protocol-level InvalidParams throw and emits no audit — the same
+//      treatment conformance C2.2 locks in for a missing gif_session_id.
+//      persona_id and gif_session_id are excluded here: each keeps its
+//      dedicated dispatcher check (load-bearing error messages, and for
+//      session handles the audited rejection paths in validateSessionHandle
+//      and session_close).
+//
+//   2. Handler-level value guards (nonEmptyStringArgError, jsonObjectArgError)
+//      for present-but-invalid values: empty strings that satisfy NOT NULL but
+//      bypass a declared `minLength: 1`, and JSON.parse results that are not
+//      plain objects where an object is required. These reject inside the
+//      handler as ordinary tool errors, so the dispatcher's audit emission
+//      still records the attempt (outcome 'error').
+//
+// Without these guards, presence was enforced only by NOT NULL constraints at
+// the persistence layer — one layer below the MCP enforcement point — and the
+// declared minLength / minimum / maximum bounds were not enforced at all.
+// =============================================================================
+
+// Arguments the dispatcher validates with dedicated checks before the generic
+// required-args pass; see index.ts.
+const DISPATCHER_CHECKED_ARGS = new Set(['persona_id', 'gif_session_id']);
+
+/**
+ * Returns the name of the first field in `required` that is absent from
+ * `args` (undefined or null), or null when every required argument is
+ * present. persona_id and gif_session_id are skipped — the dispatcher
+ * validates those separately.
+ */
+export function findMissingRequiredArg(
+  required: readonly string[] | undefined,
+  args: Record<string, unknown>
+): string | null {
+  if (!required) return null;
+  for (const field of required) {
+    if (DISPATCHER_CHECKED_ARGS.has(field)) continue;
+    if (args[field] === undefined || args[field] === null) return field;
+  }
+  return null;
+}
+
+/**
+ * Returns an error message if any of the named values is not a non-empty
+ * string (the runtime form of `type: 'string', minLength: 1`), else null.
+ * Deliberately stricter than the declared minLength: whitespace-only values
+ * are rejected too — a purpose or reason of ' ' satisfies minLength but
+ * carries zero governance content. Takes [name, value] pairs so handlers can
+ * pass their already-typed args without an index-signature cast.
+ */
+export function nonEmptyStringArgError(
+  fields: ReadonlyArray<readonly [name: string, value: unknown]>
+): string | null {
+  for (const [name, value] of fields) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return `${name} must be a non-empty string`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns an error message unless `value` — the result of JSON.parse on a
+ * caller-supplied argument — is a plain JSON object. JSON.parse accepts
+ * 'null', arrays, and scalars, none of which the object-shaped arguments
+ * (filters, record, scope_definition) may be: 'null' in particular would
+ * crash Object.keys() in db_read/db_write, and in persona_create would
+ * persist a JSON null into the JSONB NOT NULL scope_definition column
+ * (JSON null is not SQL NULL, so the constraint does not catch it).
+ */
+export function jsonObjectArgError(value: unknown, field: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return `${field} must be a JSON object, e.g. {"key":"value"}`;
+  }
+  return null;
+}

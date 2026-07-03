@@ -35,6 +35,7 @@ import pool from '../db.js';
 import { Persona, logScopeViolation, EnforcementLayer } from '../persona.js';
 import type { ToolHandler } from './types.js';
 import { isSafeIdentifier, quoteIdentifier } from './sql-identifier.js';
+import { jsonObjectArgError } from './arg-guards.js';
 
 // ----------------------------------------------------------------------------
 // Table allowlist
@@ -131,6 +132,16 @@ export async function executeDbWrite(
       content: [{ type: 'text', text: JSON.stringify({
         error: `record must be a valid JSON string, e.g. {"key":"value"}`,
       }) }],
+      isError: true,
+    };
+  }
+
+  // JSON.parse accepts 'null', arrays, and scalars — Object.keys() below
+  // requires a plain object ('null' would throw straight through the handler).
+  const recordShapeError = jsonObjectArgError(parsedRecord, 'record');
+  if (recordShapeError) {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ error: recordShapeError }) }],
       isError: true,
     };
   }

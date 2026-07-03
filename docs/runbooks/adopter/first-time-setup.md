@@ -195,8 +195,13 @@ Each handler follows the same structure:
    Every governed tool must include `gif_session_id` (type `string`, format
    `uuid`) in both `properties` and `required` — the dispatcher rejects calls
    that omit it before the handler runs. Note that the SDK does not enforce
-   `inputSchema.required` at runtime under the low-level `Server`; add a
-   runtime guard in the handler for each required field.
+   `inputSchema.required` at runtime under the low-level `Server`; enforce it
+   in two layers, as the reference implementation does: a generic
+   required-presence check in your dispatcher over each tool's
+   `inputSchema.required` (see `mcp-server/src/tools/arg-guards.ts` and its
+   use in `mcp-server/src/index.ts`), plus value guards in each handler for
+   the constraints presence can't cover (`minLength`, numeric bounds, JSON
+   object shape).
 2. `validatePersona` + `validateSessionHandle` checks (enforcement, runs in
    the dispatcher before any application logic — handlers receive the
    validated `sessionId` as a parameter and trust it)
