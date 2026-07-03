@@ -5,32 +5,52 @@ Edit the source blocks directly; no image tools required.
 
 ---
 
-## 1. Request Flow — Tool Call Through Enforcement
+## 1. Request Flow — Governed Tool Call Through Enforcement (v0.2)
 
-How a single tool call travels from an AI client through gif and back.
+How a governed tool call travels from an AI client through gif and back.
+Sessions are explicit handles (GIF-019/020): the client calls `session_start`
+once, receives a `gif_session_id`, and passes it on every governed call.
 
 ```mermaid
 sequenceDiagram
     participant AI as AI Client
-    participant MCP as MCP Server<br/>(index.ts)
+    participant MCP as MCP Server<br/>(index.ts dispatcher)
     participant ENF as Enforcement Engine<br/>(enforcement.ts)
     participant DB as PostgreSQL<br/>(gif schema)
     participant TOOL as Tool Handler<br/>(registry.ts)
 
-    AI->>MCP: CallTool(tool_name, persona_id, args)
+    note over AI,DB: One-time: mint the governance session handle
+    AI->>MCP: CallTool(session_start, persona_id)
+    MCP->>ENF: validatePersona(persona_id)
+    ENF->>DB: SELECT from personas WHERE persona_id = $1
+    MCP->>TOOL: session_start.execute(...)
+    TOOL->>DB: INSERT INTO sessions → gif_session_id
+    TOOL->>DB: INSERT INTO audit_events (session_start)
+    MCP-->>AI: { gif_session_id }
+
+    note over AI,DB: Every governed call carries the handle
+    AI->>MCP: CallTool(tool_name, persona_id, gif_session_id, args)
+
+    note over MCP: Missing args object / persona_id /<br/>any inputSchema.required argument →<br/>protocol InvalidParams, no audit (GIF-022 §C2.7)
 
     MCP->>ENF: validatePersona(persona_id)
     ENF->>DB: SELECT from personas WHERE persona_id = $1
-    DB-->>ENF: persona row (status, valid_from, valid_until, scope_definition)
+    DB-->>ENF: persona row (status, temporal bounds, governance_review_status)
     ENF-->>MCP: { valid: true, persona }
 
-    alt persona invalid (not found / expired / suspended)
-        MCP-->>AI: { isError: true, reason }
+    alt persona invalid (not found / expired / suspended / not review-cleared)
+        MCP-->>AI: { isError: true, reason } — nothing logged
     end
 
-    MCP->>ENF: createSession(personaId, invocationContext)
-    ENF->>DB: INSERT INTO sessions → session_id
-    DB-->>ENF: session_id (UUID)
+    MCP->>ENF: validateSessionHandle(persona_id, gif_session_id, TTL)
+    ENF->>DB: SELECT persona_id, ended_at, started_at FROM sessions
+    ENF-->>MCP: accept, or rejection reason<br/>(closed > expired precedence; fail-closed on DB error)
+
+    alt handle rejected (not found / mismatch / closed / expired)
+        MCP->>ENF: logAuditEvent(session_rejected_closed | session_expired,<br/>outcome 'denied') — best-effort
+        ENF->>DB: INSERT INTO audit_events
+        MCP-->>AI: { isError: true, reason }
+    end
 
     MCP->>TOOL: execute(args, persona, sessionId)
 
@@ -51,12 +71,11 @@ sequenceDiagram
     TOOL-->>MCP: result
 
     MCP->>ENF: logAuditEvent(personaId, sessionId, toolName, outcome, ...)
-    ENF->>DB: INSERT INTO audit_events
-
-    MCP->>ENF: closeSession(sessionId)
-    ENF->>DB: UPDATE sessions SET ended_at = now()
+    ENF->>DB: INSERT INTO audit_events (hash-chained by trigger)
 
     MCP-->>AI: result
+
+    note over MCP,DB: Session is NOT closed per call — closure is<br/>caller-driven (session_close) or TTL-driven (GIF-020)
 ```
 
 ---
@@ -221,12 +240,12 @@ flowchart TB
         POOL["DB Pool<br/>(adopter credentials)"]
         AREG["Tool Registry<br/>(GIF tools + domain tools)"]
         ATOOLS["Domain Tool Handlers<br/>(e.g. db_read, db_write)"]
-        AENV["Environment<br/>.env — DB_URL, IDENTITY_HMAC_SECRET, PORT"]
+        AENV["Environment<br/>.env — DB_URL, IDENTITY_HMAC_SECRET,<br/>PORT, GIF_SESSION_TTL_SECONDS"]
     end
 
     subgraph GIF["gif-enforcement (imported package, pinned by tag)"]
-        CE["createEnforcement(pool)<br/>→ validatePersona<br/>→ createSession / closeSession<br/>→ logAuditEvent<br/>→ logScopeViolation<br/>→ checkCombinationPolicies<br/>→ verifyIdentityBinding<br/>→ logAuditRead"]
-        GTOOLS["GIF Framework Tools<br/>persona_validate<br/>persona_create<br/>persona_revoke"]
+        CE["createEnforcement(pool)<br/>→ validatePersona<br/>→ validateSessionHandle<br/>→ createSession / closeSession<br/>→ logAuditEvent<br/>→ logScopeViolation<br/>→ checkCombinationPolicies<br/>→ verifyIdentityBinding<br/>→ logAuditRead"]
+        GTOOLS["GIF Framework Tools<br/>persona_validate<br/>persona_create<br/>persona_revoke<br/>session_start<br/>session_close"]
     end
 
     subgraph DB["PostgreSQL — gif schema"]
