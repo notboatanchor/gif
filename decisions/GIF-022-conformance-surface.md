@@ -60,6 +60,20 @@
   path now asserts an `auto_approved` persona dispatches; the `pending`
   reject case is unchanged.
   — `Status: Final`, Type: Process, Sponsor: None.
+- 2026-07-03 — **§C2.7 input-validation boundary (second normative
+  amendment).** The missing-handle parenthetical is generalized to
+  every required argument: a call rejected by protocol-level input
+  validation before governance evaluation begins (any argument listed
+  in the tool's `inputSchema.required` absent from `args`) is not a
+  governed event and emits no audit event; a call that passes input
+  validation and whose governance evaluation or handler execution
+  then fails MUST emit an audit event with `outcome: 'error'`. This
+  matches the dispatcher-generic required-argument check shipped in
+  PR #47 (`mcp-server/src/tools/arg-guards.ts`, wired in
+  `mcp-server/src/index.ts`): an absent required argument is an
+  `InvalidParams` protocol throw with no audit; a present-but-invalid
+  value is rejected by an in-handler guard and audited with
+  `outcome: 'error'`.
 
 ## Decision
 
@@ -193,7 +207,14 @@ specification; this ADR consolidates and surfaces them.
   event recording the rejection. (The missing-`gif_session_id`
   case is rejected at the protocol layer with an `InvalidParams`
   error before handle validation runs and emits no audit event —
-  a malformed request is not a governance rejection.) The audit
+  a malformed request is not a governance rejection. This boundary
+  is general, not handle-specific: a call rejected by
+  protocol-level input validation before governance evaluation
+  begins — any argument listed in the tool's `inputSchema.required`
+  absent from `args` — is not a governed event and emits no audit
+  event; a call that passes input validation and whose governance
+  evaluation or handler execution then fails MUST emit an audit
+  event with `outcome: 'error'`.) The audit
   emission is best-effort per the audit-never-throws
   non-negotiable; a failed emission does not change the rejection
   response. (CLAUDE.md audit-never-throws, GIF-020 §C6)
