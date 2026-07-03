@@ -68,6 +68,24 @@ See [`docs/gif-101.md`](docs/gif-101.md) for a technical walkthrough of the code
 
 ---
 
+## Audit Integrity and the Record Contract
+
+Every audit record is hash-chained at the database layer: a trigger computes a
+SHA-256 digest over a canonical byte form of the record and links it to the
+previous row's digest, so any after-the-fact mutation or deletion breaks the
+chain. A verifier CLI walks the partitions, recomputes every digest, and reports
+mismatches and chain breaks — the trail's integrity is independently checkable,
+not taken on the operator's word.
+
+The canonical record form and its verification procedure are specified in
+[SEP-3004 — Tamper-Evident Audit Record Contract](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3004),
+an MCP Standards-Track proposal (in review), for which GIF is the reference
+implementation. The runnable known-answer vectors ship in this repository under
+[`mcp-server/conformance/audit-record-contract/`](mcp-server/conformance/audit-record-contract/)
+— from `mcp-server/`, `npm run vectors` expects `23 vectors — 23 passed, 0 failed`.
+
+---
+
 ## Quick Start
 
 **Prerequisites:** Docker Engine 24+, Docker Compose v2, Git.
@@ -106,12 +124,13 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 | [`docs/secrets.md`](docs/secrets.md) | Operators, adopters | Env-var contract, vault reference patterns, rotation procedures |
 | [`docs/runbooks/contributor/`](docs/runbooks/contributor/) | Contributors | First-time setup, schema migrations |
 | [`docs/runbooks/adopter/`](docs/runbooks/adopter/) | Adopters | First-time setup, upgrade path |
+| [`mcp-server/conformance/audit-record-contract/`](mcp-server/conformance/audit-record-contract/) | Implementers, auditors | Canonical audit-record form, hash-chain verification, runnable known-answer vectors (SEP-3004) |
 
 ---
 
 ## Current State
 
-`v0.2.0-rc.4` is the recommended pin. It runs on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0-beta.1`, ESM-only) and carries the v0.2 governance-session semantics: explicit `gif_session_id` handles minted by `session_start` (the MCP 2026-07-28 spec's server-minted session-handle model, SEP-2567), caller-driven close, and wall-clock TTL. Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies, SQL-identifier safety) plus the six GIF-022 conformance scenarios run on every commit via CI. TypeScript strict mode throughout.
+`v0.2.0-rc.4` is the recommended pin. It runs on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0-beta.1`, ESM-only) and carries the v0.2 governance-session semantics: explicit `gif_session_id` handles minted by `session_start` (the MCP 2026-07-28 spec's server-minted state-handle model, SEP-2567), caller-driven close, and wall-clock TTL. Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies, SQL-identifier safety) plus the six GIF-022 conformance scenarios run on every commit via CI. TypeScript strict mode throughout.
 
 The RC line tracks MCP SDK 2.0 prereleases through the spec RC window; the pin moves to `^2.0.0` at `v0.2.0` final. The server currently negotiates the `2025-11-25` protocol revision on the wire — serving the `2026-07-28` revision (`server/discover`, cache envelopes) requires the SDK's `createMcpHandler` hosting layer and is queued for `v0.2.0` final.
 
@@ -121,7 +140,7 @@ Shipped capabilities:
 
 - Persona lifecycle (create, activate, expire, revoke)
 - MCP enforcement layer with Streamable HTTP transport
-- Append-only audit trail (INSERT-only at database level)
+- Append-only audit trail (INSERT-only at database level), hash-chained with a chain-verifier CLI
 - Scope violation detection as first-class governance events
 - Delegation chain enforcement (scope subset rules, depth limits)
 - Session management as discrete governance events
@@ -130,7 +149,7 @@ Shipped capabilities:
 - Combination policy primitive (schema, active-policy evaluator, fail-closed semantics; adopter-invoked)
 - Provisioner identity binding (HMAC identity token issued by CLI; verified at persona_create; human_actor_id on every audit event)
 
-The compliance hardening roadmap (chain verifier CLI for the existing hash-chained audit trail, encryption at rest, multi-tenant operational hardening) is documented in [`docs/gif-product-overview.md`](docs/gif-product-overview.md).
+The compliance hardening roadmap (external timestamping anchors for the hash chain, encryption at rest, multi-tenant operational hardening) is documented in [`docs/gif-product-overview.md`](docs/gif-product-overview.md).
 
 ---
 
