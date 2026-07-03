@@ -7,9 +7,10 @@ tested audit guarantee as a **vendor-neutral** contract — no Postgres, no
 gif-specific schema — so any implementation, in any profile, can be checked
 against it.
 
-The companion SEP — the *Tamper-Evident Audit Record Contract* — is submitted to
-the MCP SEP process (`modelcontextprotocol/modelcontextprotocol`, `seps/`); it is
-the authoritative home for the contract text and the sealed known-answer values.
+The companion SEP — **SEP-3004: Tamper-Evident Audit Record Contract**
+([modelcontextprotocol#3004](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3004))
+— is submitted to the MCP SEP process; it is the authoritative home for the
+contract text and the sealed known-answer values.
 
 **Status:** `gif-audit/2` — the **`extensions` keyed object** shape. Sorted-JSON
 canonicalization aligned with PR #2809, `purpose_declared` inside the chain,
@@ -110,7 +111,7 @@ reproduces it from the rule, per the KAT-ownership decision.
 
 ## Relationship to the SEP
 
-These vectors are the runnable conformance artifact the SEP's Reference
+These vectors are the runnable conformance artifact SEP-3004's Reference
 Implementation / Conformance sections link to: clone this repo, run one command,
 see `23 vectors — 23 passed, 0 failed`. The SEP document carries the authoritative
 contract text and the sealed known-answer values; this suite proves they run.
