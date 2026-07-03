@@ -234,8 +234,11 @@ try {
     fail('Tampered token (bad HMAC) is rejected', content3);
   }
 
-  // Test 6: persona_create without identity_token is rejected (required field)
-  const result4 = await callTool('persona_create', {
+  // Test 6: persona_create without identity_token is rejected (required field).
+  // The dispatcher's generic inputSchema.required check rejects a MISSING
+  // required argument as a protocol-level InvalidParams throw (the C2.2
+  // treatment) — client.callTool() throws rather than returning isError.
+  const createArgsNoToken = {
     persona_id:       issuerId,
     gif_session_id,
     issuing_entity:   'test_runner',
@@ -244,13 +247,33 @@ try {
     scope_definition: scope,
     valid_until:      '2027-01-01T00:00:00Z',
     // no identity_token
+  };
+  try {
+    await callTool('persona_create', createArgsNoToken);
+    fail('persona_create without identity_token is rejected',
+      'Expected an MCP InvalidParams throw, but the call returned');
+  } catch (err) {
+    if (String(err.message).includes('identity_token')) {
+      pass('persona_create without identity_token is rejected (protocol-level InvalidParams)');
+    } else {
+      fail('persona_create without identity_token is rejected',
+        `Threw, but without naming identity_token: ${err.message}`);
+    }
+  }
+
+  // Test 6b: a PRESENT but empty identity_token passes the dispatcher's
+  // presence check and is rejected by the in-handler guard as an ordinary
+  // (audited) tool error — the second layer of the two-layer design.
+  const result4 = await callTool('persona_create', {
+    ...createArgsNoToken,
+    identity_token: '',
   });
   const content4 = result4?.content?.[0]?.text ?? '';
-  if (result4?.isError || content4.includes('binding') || content4.includes('token') || content4.includes('required')) {
-    pass('persona_create without identity_token is rejected');
+  if (result4?.isError && content4.includes('identity_token')) {
+    pass('persona_create with empty identity_token is rejected by the handler guard');
   } else {
-    fail('persona_create without identity_token is rejected',
-      `Expected rejection, got: ${content4}`);
+    fail('persona_create with empty identity_token is rejected by the handler guard',
+      `Expected isError naming identity_token, got: ${content4}`);
   }
 
   // Test 7: human_actor_id is set on the audit event for the token-bound creation

@@ -37,6 +37,7 @@
 // =============================================================================
 import pool from '../db.js';
 import { logScopeViolation } from '../persona.js';
+import { nonEmptyStringArgError } from './arg-guards.js';
 // ----------------------------------------------------------------------------
 // executePersonaRevoke()
 // ----------------------------------------------------------------------------
@@ -56,6 +57,21 @@ export async function executePersonaRevoke(args, persona, sessionId) {
             content: [{ type: 'text', text: JSON.stringify({
                         error: `Persona ${args.persona_id} does not have 'manage_personas' in permitted_actions`,
                     }) }],
+            isError: true,
+        };
+    }
+    // Runtime form of the declared string constraints (minLength 1; whitespace-
+    // only also rejected). The DB's NOT NULL on revocation_log catches absent
+    // reason/revoked_by but not empty or blank strings — a revocation must
+    // carry a real reason and actor identity.
+    const stringArgError = nonEmptyStringArgError([
+        ['target_persona_id', args.target_persona_id],
+        ['reason', args.reason],
+        ['revoked_by', args.revoked_by],
+    ]);
+    if (stringArgError) {
+        return {
+            content: [{ type: 'text', text: JSON.stringify({ error: stringArgError }) }],
             isError: true,
         };
     }
@@ -153,7 +169,7 @@ export const handler = {
             properties: {
                 persona_id: { type: 'string', format: 'uuid', description: 'UUID of the issuing persona (must have manage_personas)' },
                 gif_session_id: { type: 'string', format: 'uuid', description: 'Governance session handle returned by session_start (GIF-019/020)' },
-                target_persona_id: { type: 'string', format: 'uuid', description: 'UUID of the persona to revoke' },
+                target_persona_id: { type: 'string', format: 'uuid', minLength: 1, description: 'UUID of the persona to revoke' },
                 reason: { type: 'string', minLength: 1, description: 'Reason for revocation — recorded in revocation_log' },
                 revoked_by: { type: 'string', minLength: 1, description: 'Identity of the actor initiating the revocation' },
             },

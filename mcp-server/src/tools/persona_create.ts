@@ -50,6 +50,7 @@
 import pool from '../db.js';
 import { Persona, ScopeDefinition, logScopeViolation, verifyIdentityBinding, EnforcementLayer } from '../persona.js';
 import type { ToolHandler, ToolResult } from './types.js';
+import { nonEmptyStringArgError, jsonObjectArgError } from './arg-guards.js';
 
 // ----------------------------------------------------------------------------
 // Types
@@ -141,6 +142,37 @@ export async function executePersonaCreate(
     };
   }
 
+  // Runtime form of the declared string constraints (minLength 1; whitespace-
+  // only also rejected). The DB's NOT NULL catches absent values but not empty
+  // or blank strings — and a persona with a blank purpose would defeat the
+  // purpose-non-nullable guarantee.
+  const stringArgError = nonEmptyStringArgError([
+    ['issuing_entity', args.issuing_entity],
+    ['purpose',        args.purpose],
+    ['created_by',     args.created_by],
+    ['valid_until',    args.valid_until],
+  ]);
+  if (stringArgError) {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ error: stringArgError }) }],
+      isError: true,
+    };
+  }
+
+  // inputSchema declares max_delegation_depth minimum 0 — enforce when the
+  // caller provides it (absent falls back to the schema default of 0).
+  if (args.max_delegation_depth !== undefined &&
+      (typeof args.max_delegation_depth !== 'number' ||
+       !Number.isFinite(args.max_delegation_depth) ||
+       args.max_delegation_depth < 0)) {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        error: 'max_delegation_depth must be a number greater than or equal to 0',
+      }) }],
+      isError: true,
+    };
+  }
+
   // Parse scope_definition
   let parsedScope: ScopeDefinition;
   try {
@@ -150,6 +182,17 @@ export async function executePersonaCreate(
       content: [{ type: 'text', text: JSON.stringify({
         error: 'scope_definition must be a valid JSON string',
       }) }],
+      isError: true,
+    };
+  }
+
+  // JSON.parse accepts 'null', arrays, and scalars. A JSON null in particular
+  // would survive the JSONB NOT NULL constraint (JSON null is not SQL NULL)
+  // and mint a persona whose scope checks then throw on every governed call.
+  const scopeShapeError = jsonObjectArgError(parsedScope, 'scope_definition');
+  if (scopeShapeError) {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ error: scopeShapeError }) }],
       isError: true,
     };
   }
@@ -391,7 +434,7 @@ export const handler: ToolHandler = {
         purpose:              { type: 'string', minLength: 1, description: 'Human-readable declaration of business function' },
         created_by:           { type: 'string', minLength: 1, description: 'Identity of the actor creating the persona' },
         scope_definition:     { type: 'string', description: 'JSON string of scope: permitted_sources, permitted_actions, output_destinations, retention_policy' },
-        valid_until:          { type: 'string', description: 'ISO 8601 datetime when persona expires' },
+        valid_until:          { type: 'string', minLength: 1, description: 'ISO 8601 datetime when persona expires' },
         valid_from:           { type: 'string', description: 'ISO 8601 datetime when persona becomes valid (defaults to now)' },
         max_delegation_depth: { type: 'number', minimum: 0, default: 0, description: 'Maximum delegation hops allowed (0 = no delegation)' },
         parent_persona_id:    { type: 'string', format: 'uuid', description: 'UUID of parent persona for delegated scope (optional)' },

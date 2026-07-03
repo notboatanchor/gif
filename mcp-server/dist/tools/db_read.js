@@ -31,6 +31,7 @@
 import pool from '../db.js';
 import { logScopeViolation, logAuditRead } from '../persona.js';
 import { isSafeIdentifier, quoteIdentifier } from './sql-identifier.js';
+import { jsonObjectArgError } from './arg-guards.js';
 // ----------------------------------------------------------------------------
 // Table allowlist
 // Only these tables may be queried via db_read regardless of persona scope.
@@ -110,6 +111,16 @@ export async function executeDbRead(args, persona, sessionId) {
             isError: true,
         };
     }
+    // inputSchema declares limit bounds (minimum 1, maximum 1000) — enforced
+    // here; nothing validates the schema under the low-level Server.
+    if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 1 || limit > 1000) {
+        return {
+            content: [{ type: 'text', text: JSON.stringify({
+                        error: 'limit must be a number between 1 and 1000',
+                    }) }],
+            isError: true,
+        };
+    }
     // Parse filters JSON string if provided
     let parsedFilters = {};
     if (filters) {
@@ -121,6 +132,15 @@ export async function executeDbRead(args, persona, sessionId) {
                 content: [{ type: 'text', text: JSON.stringify({
                             error: `filters must be a valid JSON string, e.g. {"status":"active"}`,
                         }) }],
+                isError: true,
+            };
+        }
+        // JSON.parse accepts 'null', arrays, and scalars — Object.keys() below
+        // requires a plain object ('null' would throw straight through the handler).
+        const filtersShapeError = jsonObjectArgError(parsedFilters, 'filters');
+        if (filtersShapeError) {
+            return {
+                content: [{ type: 'text', text: JSON.stringify({ error: filtersShapeError }) }],
                 isError: true,
             };
         }
