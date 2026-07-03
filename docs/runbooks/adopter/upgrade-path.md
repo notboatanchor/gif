@@ -101,7 +101,7 @@ Newly applied migrations will appear at the bottom with a recent `applied_at`
 timestamp. Migrations from before the upgrade will show their original timestamps
 (Path B) or be absent if you wiped (Path A, expected).
 
-Run the smoke test from the [first-time-setup runbook](./first-time-setup.md#7-smoke-test)
+Run the smoke test from the [first-time-setup runbook](./first-time-setup.md#10-smoke-test)
 to confirm the MCP server is functioning.
 
 ---
