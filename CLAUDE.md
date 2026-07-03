@@ -81,6 +81,19 @@ via `validateSessionHandle` before tool execution. Tool handlers never
 re-implement session validation — they receive the validated `sessionId` as a
 parameter and trust it. See GIF-019, GIF-022 §C2.
 
+**Protocol-level input rejection is not a governance event.** A call rejected
+by input validation before governance evaluation begins — any argument listed
+in the tool's `inputSchema.required` absent from `args` — fails the
+dispatcher-generic guard (`mcp-server/src/tools/arg-guards.ts`) with a protocol
+`InvalidParams` throw and emits **no audit event**. A call that passes input
+validation and whose governance evaluation or handler execution then fails MUST
+emit an audit event with `outcome: 'error'`; value-level constraint failures
+(blank strings vs `minLength`, range violations, JSON `null`) are rejected by
+in-handler guards on that audited path. Do not add audit emission to the
+pre-validation rejection path, and do not demote the audited value guards to
+protocol throws — the boundary is normative (GIF-022 §C2.7, second amendment);
+moving it requires an ADR amendment, not a code fix.
+
 **Dispatcher does not auto-close sessions.** Session closure is caller-driven
 (`session_close` tool) or TTL-driven (`GIF_SESSION_TTL_SECONDS`, default
 86400). Do not add a `finally`-block close on the dispatch path — v0.1's
@@ -101,15 +114,19 @@ and tamper-evidence guarantees; the review gate is mandatory for them, not
 optional. Do not merge enforcement/audit/schema work on an in-session "green"
 alone — verify on a clean install.
 
-**Audit canonical form is byte-identical across all three implementations.** The
+**Audit canonical form is byte-identical across all four implementations.** The
 PG trigger (`schema/0NN_audit_canonical_json*.sql`), the `verify_audit_chain.ts`
-verifier (`buildBody*`), and the `.mjs` test-harness replicas must produce
-byte-identical canonical preimages — the hash chain's tamper-evidence is only as
-trustworthy as `emit ≡ verify`. Any change to canonicalization updates all three
-sites together and reproduces the sealed KAT before merge (the same silent-drift
-hazard as the migration apply-paths rule below). Never backfill or rewrite
-`canon_version` on existing rows — historical rows verify under the version they
-were stamped with.
+verifier (`buildBody*`), the `.mjs` test-harness replicas, and the published
+conformance-vector canonicalizer
+(`mcp-server/conformance/audit-record-contract/`) must produce byte-identical
+canonical preimages — the hash chain's tamper-evidence is only as trustworthy as
+`emit ≡ verify`. Any change to canonicalization updates all four sites together
+and reproduces the sealed KATs before merge (the same silent-drift hazard as the
+migration apply-paths rule below). The vectors copy is synced verbatim with the
+companion SEP's reference implementation (the authoritative home for the
+contract and its sealed known-answer values) — never forked locally. Never
+backfill or rewrite `canon_version` on existing rows — historical rows verify
+under the version they were stamped with.
 
 **Structural claims about the code cite their source.** Any assertion that the
 code drifts, mismatches, is broken, or that a test vector equals a given digest
