@@ -22,9 +22,9 @@ in any environment that handles real audit data.
 
 ```bash
 # HTTPS (no SSH key required):
-git clone --branch v0.2.0-rc.4 https://github.com/notboatanchor/gif.git
+git clone --branch v0.2.0 https://github.com/notboatanchor/gif.git
 # Or SSH:
-# git clone --branch v0.2.0-rc.4 git@github.com:notboatanchor/gif.git
+# git clone --branch v0.2.0 git@github.com:notboatanchor/gif.git
 
 cd gif
 ```
@@ -126,14 +126,14 @@ Expected response: `{"status":"ok","service":"gif-mcp-server"}`
 In your adopter tool server, add `gif-enforcement` as a pinned git dependency:
 
 ```bash
-npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.0-rc.4"
+npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.0"
 ```
 
 This adds the following to your `package.json`:
 
 ```json
 "dependencies": {
-  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.0-rc.4"
+  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.0"
 }
 ```
 
