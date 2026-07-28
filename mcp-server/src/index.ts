@@ -252,6 +252,12 @@ function createServer() {
 // ----------------------------------------------------------------------------
 
 const mcpHandler = createMcpHandler(() => createServer(), {
+  // subscriptions/listen is served by the SDK BEFORE the factory's Server (and
+  // therefore gif's enforcement core) is consulted — an unauthenticated caller
+  // could otherwise hold open up to the SDK-default 1024 SSE streams. gif uses
+  // no server-push subscriptions; refuse them all. Re-enabling requires an
+  // authenticated subscription design, not just raising this cap.
+  maxSubscriptions: 0,
   onerror: (err) => { console.error('[server] MCP handler error:', err.message); },
 });
 
@@ -261,8 +267,13 @@ const mcpNodeHandler = toNodeHandler(mcpHandler, {
 
 // ----------------------------------------------------------------------------
 // HTTP server — thin router: /health stays hand-served (independently
-// reverse-proxied in deployments — see docs/production-deployment.md),
-// /mcp delegates to the SDK handler.
+// reverse-proxied in deployments — see
+// docs/runbooks/adopter/production-deployment.md), /mcp delegates to the SDK
+// handler. Host/Origin (DNS-rebinding) validation is deliberately not done
+// here: gif deploys behind a reverse proxy that owns hostname routing (same
+// runbook). Deployments that bind gif directly to a local port should put the
+// SDK's hostHeaderValidationResponse / originValidationResponse helpers in
+// front of the /mcp delegation.
 // ----------------------------------------------------------------------------
 
 const httpServer = http.createServer((req, res) => {

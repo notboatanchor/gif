@@ -89,13 +89,22 @@ GIF does not implement rate limiting. Add it at the reverse proxy layer.
 - Per-persona: if your proxy can inspect request bodies, rate limiting by
   `persona_id` prevents a compromised persona from generating unbounded
   audit volume
+- Request-body size: neither GIF nor the MCP SDK caps request-body size —
+  set `client_max_body_size` (nginx) or your proxy's equivalent
+- Concurrent connections: pair the request-rate limit with a per-IP
+  concurrent-connection cap (`limit_conn`) so long-lived streaming
+  connections cannot pin sockets; request-rate limits alone do not bound
+  held-open connections
 
 **nginx example (per-IP):**
 ```nginx
-limit_req_zone $binary_remote_addr zone=gif_limit:10m rate=30r/m;
+limit_req_zone  $binary_remote_addr zone=gif_limit:10m rate=30r/m;
+limit_conn_zone $binary_remote_addr zone=gif_conn:10m;
 
 location /mcp {
-    limit_req zone=gif_limit burst=10 nodelay;
+    limit_req  zone=gif_limit burst=10 nodelay;
+    limit_conn gif_conn 10;
+    client_max_body_size 1m;
     proxy_pass http://localhost:3100;
 }
 ```

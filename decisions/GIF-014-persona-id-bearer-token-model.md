@@ -52,7 +52,9 @@ This is the correct implementation for adopters with high-assurance runtime auth
 - The accountability gap it closes (misconfiguration, not attack) is adequately addressed by GIF-013's adopter obligations for general deployments
 - Building it into GIF core before adopter deployment patterns are known risks building the wrong abstraction
 
-**Extension points for a contributor implementation:** the `transports` map in `index.ts` (keyed by MCP session ID), `user_persona_assignments.assignment_id` (the persistent post-provisioning credential), and a new `session_bindings` table to record the MCP session → assignment → persona mapping in the audit record.
+**Extension points for a contributor implementation:** `user_persona_assignments.assignment_id` (the persistent post-provisioning credential), and a new `session_bindings` table to record the assignment → persona mapping in the audit record.
+
+*[Updated at v0.2.0 (PR #54): this list originally named the `transports` map in `index.ts` (keyed by MCP session ID) as the binding anchor. The `createMcpHandler` hosting migration removed that map — the server is stateless per-request and holds no MCP transport session. The binding anchor for a contributor implementation is now the SDK's per-request context (the `McpRequestContext` handed to the server factory in `index.ts`) and the modern request's `_meta` envelope, with the assignment presented per request rather than at session initialization.]*
 
 See CONTRIBUTING.md for the full project description.
 

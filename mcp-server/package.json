@@ -1,6 +1,6 @@
 {
   "name": "gif-enforcement",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GIF MCP server — AI tool interface and persona enforcement layer",
   "license": "Apache-2.0",
   "type": "module",
@@ -30,7 +30,7 @@
     "pg": "^8.11.3"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "^22.19.19",
     "@types/pg": "^8.11.0",
     "eslint": "^9.0.0",
