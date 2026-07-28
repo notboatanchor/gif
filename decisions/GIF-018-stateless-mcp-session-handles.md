@@ -37,6 +37,9 @@ Two distinct uses, currently entangled in code:
    map by `mcp-session-id` so subsequent requests over Streamable HTTP
    reach the established transport instance. This use is purely
    protocol-mechanical — GIF doesn't read the header for governance.
+   *[v0.2.0 note (PR #54): the `transports` map was removed by the
+   `createMcpHandler` hosting migration — transport routing is SDK-owned
+   and stateless per-request. The analysis below is unaffected.]*
 
 2. **Per-call session row in `sessions`.** Every governed tool call
    creates a row in `gif.sessions` via `createSession()` at

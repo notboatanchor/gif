@@ -17,7 +17,10 @@
 // src/index.ts
 // =============================================================================
 // GIF MCP server — entry point
-// Streamable HTTP transport (ADR-002). Listens on PORT (default 3100).
+// Hosted via the SDK's createMcpHandler (2026-07-28 revision): modern
+// requests are served per-request (server/discover + _meta envelope handled
+// by the SDK); 2025-era requests are served by the SDK's built-in stateless
+// Streamable HTTP fallback (ADR-002). Listens on PORT (default 3100).
 //
 // Dispatcher responsibilities (v0.2 — GIF-019/020/022):
 //   1. Validate persona (existence, active status, temporal bounds, governance).
@@ -48,9 +51,8 @@
 // GIF-022: v0.2 conformance surface
 // =============================================================================
 
-import { randomUUID } from 'node:crypto';
-import { Server, ProtocolError, ProtocolErrorCode, isInitializeRequest } from '@modelcontextprotocol/server';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
 import http from 'http';
 import { validatePersona } from './persona.js';
 import { logAuditEvent, validateSessionHandle } from './session.js';
@@ -67,7 +69,7 @@ if (!Number.isFinite(GIF_SESSION_TTL_SECONDS) || GIF_SESSION_TTL_SECONDS <= 0) {
 }
 
 // ----------------------------------------------------------------------------
-// MCP server factory — one Server instance per session
+// MCP server factory — one Server instance per request
 // (Server is the low-level API required for registry-driven dispatch — gif's
 // enforcement engine needs full control over request handling, which the
 // high-level McpServer abstraction does not expose.)
@@ -76,8 +78,19 @@ if (!Number.isFinite(GIF_SESSION_TTL_SECONDS) || GIF_SESSION_TTL_SECONDS <= 0) {
 function createServer() {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- low-level API required for registry-driven dispatch
   const server = new Server(
-    { name: 'gif-mcp-server', version: '0.1.0' },
-    { capabilities: { tools: {} } }
+    { name: 'gif-mcp-server', version: '0.2.0' },
+    {
+      capabilities: { tools: {} },
+      // 2026-07-28 cache envelope: explicit do-not-cache hints. tools/list is
+      // persona-independent today but the registry is enforcement surface —
+      // never let a shared cache serve it; server/discover likewise. These
+      // match the SDK defaults (ttlMs: 0, cacheScope: 'private') but the
+      // posture is declared, not inherited.
+      cacheHints: {
+        'tools/list':      { cacheScope: 'private', ttlMs: 0 },
+        'server/discover': { cacheScope: 'private', ttlMs: 0 },
+      },
+    }
   );
 
   // --------------------------------------------------------------------------
@@ -229,37 +242,41 @@ function createServer() {
 }
 
 // ----------------------------------------------------------------------------
-// Active Streamable HTTP transports — keyed by MCP session ID
+// MCP hosting — SDK createMcpHandler (2026-07-28 revision)
+// The factory mints a fresh Server per request; server/discover and the
+// _meta envelope are handled inside the SDK. 2025-era requests fall through
+// the SDK's built-in stateless fallback (sessionIdGenerator: undefined;
+// GET/DELETE answered 405). gif holds no transport-session state — persona
+// and governance-session identity ride in tool args (persona_id,
+// gif_session_id, GIF-019) — so per-request hosting drops no semantics.
 // ----------------------------------------------------------------------------
 
-const transports = new Map<string, NodeStreamableHTTPServerTransport>();
+const mcpHandler = createMcpHandler(() => createServer(), {
+  // subscriptions/listen is served by the SDK BEFORE the factory's Server (and
+  // therefore gif's enforcement core) is consulted — an unauthenticated caller
+  // could otherwise hold open up to the SDK-default 1024 SSE streams. gif uses
+  // no server-push subscriptions; refuse them all. Re-enabling requires an
+  // authenticated subscription design, not just raising this cap.
+  maxSubscriptions: 0,
+  onerror: (err) => { console.error('[server] MCP handler error:', err.message); },
+});
+
+const mcpNodeHandler = toNodeHandler(mcpHandler, {
+  onerror: (err) => { console.error('[server] MCP adapter error:', err.message); },
+});
 
 // ----------------------------------------------------------------------------
-// Body parsing — required for raw Node.js HTTP (no framework body parser)
+// HTTP server — thin router: /health stays hand-served (independently
+// reverse-proxied in deployments — see
+// docs/runbooks/adopter/production-deployment.md), /mcp delegates to the SDK
+// handler. Host/Origin (DNS-rebinding) validation is deliberately not done
+// here: gif deploys behind a reverse proxy that owns hostname routing (same
+// runbook). Deployments that bind gif directly to a local port should put the
+// SDK's hostHeaderValidationResponse / originValidationResponse helpers in
+// front of the /mcp delegation.
 // ----------------------------------------------------------------------------
 
-function readBody(req: http.IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-    req.on('end', () => {
-      try {
-        resolve(data ? JSON.parse(data) : undefined);
-      } catch {
-        reject(new Error('Invalid JSON in request body'));
-      }
-    });
-    req.on('error', reject);
-  });
-}
-
-// ----------------------------------------------------------------------------
-// HTTP request handler (async) — extracted so the createServer callback
-// remains synchronous, satisfying TypeScript's void-return expectation.
-// ----------------------------------------------------------------------------
-
-async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-
+const httpServer = http.createServer((req, res) => {
   console.log(`[server] ${req.method ?? ''} ${req.url ?? ''}`);
 
   if (req.method === 'GET' && req.url === '/health') {
@@ -269,93 +286,18 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   if (req.url === '/mcp') {
-
-    if (req.method === 'POST') {
-      let body: unknown;
-      try {
-        body = await readBody(req);
-      } catch {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid request body' }));
-        return;
+    mcpNodeHandler(req, res).catch((err: unknown) => {
+      console.error('[server] Unhandled request error:', err);
+      if (!res.headersSent) {
+        res.writeHead(500);
+        res.end();
       }
-
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-
-      if (sessionId && transports.has(sessionId)) {
-        // Existing session — route to the established transport
-        const transport = transports.get(sessionId);
-        if (!transport) return; // unreachable: has() confirmed existence
-        await transport.handleRequest(req, res, body);
-        return;
-      }
-
-      if (!sessionId && isInitializeRequest(body)) {
-        // New session initialization
-        const transport = new NodeStreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (sid) => {
-            transports.set(sid, transport);
-            console.log(`[server] Session opened: ${sid}`);
-          },
-        });
-
-        transport.onclose = () => {
-          const sid = transport.sessionId;
-          if (sid) {
-            transports.delete(sid);
-            console.log(`[server] Session closed: ${sid}`);
-          }
-        };
-
-        const server = createServer();
-        await server.connect(transport);
-        await transport.handleRequest(req, res, body);
-        return;
-      }
-
-      // No valid session ID and not an initialize request
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: missing or invalid session' },
-        id: null,
-      }));
-      return;
-    }
-
-    if (req.method === 'GET' || req.method === 'DELETE') {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-
-      if (!sessionId || !transports.has(sessionId)) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid or missing session ID' }));
-        return;
-      }
-
-      const transport = transports.get(sessionId);
-      if (!transport) return; // unreachable: has() confirmed existence
-      await transport.handleRequest(req, res);
-      return;
-    }
+    });
+    return;
   }
 
   res.writeHead(404);
   res.end();
-}
-
-// ----------------------------------------------------------------------------
-// HTTP server
-// ----------------------------------------------------------------------------
-
-const httpServer = http.createServer((req, res) => {
-  handleRequest(req, res).catch((err: unknown) => {
-    console.error('[server] Unhandled request error:', err);
-    if (!res.headersSent) {
-      res.writeHead(500);
-      res.end();
-    }
-  });
 });
 
 httpServer.listen(PORT, () => {
@@ -368,12 +310,9 @@ httpServer.listen(PORT, () => {
 
 process.on('SIGTERM', () => {
   console.log('[server] SIGTERM received — shutting down');
-  for (const [sid, transport] of transports) {
-    transport.close().catch((err: unknown) => {
-      console.error(`[server] Error closing transport for session ${sid}:`, err);
-    });
-  }
-  transports.clear();
+  mcpHandler.close().catch((err: unknown) => {
+    console.error('[server] Error closing MCP handler:', err);
+  });
   httpServer.close(() => {
     console.log('[server] HTTP server closed');
     process.exit(0);

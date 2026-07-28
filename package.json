@@ -1,6 +1,6 @@
 {
   "name": "gif-enforcement",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GIF enforcement package — persona-based permissions and audit trail for AI tool interfaces",
   "license": "Apache-2.0",
   "type": "module",
@@ -16,8 +16,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0-beta.1",
-    "@modelcontextprotocol/node": "2.0.0-beta.1",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
     "pg": "^8.11.3"
   }
 }

@@ -137,8 +137,10 @@ This adds the following to your `package.json`:
 }
 ```
 
-The v0.2 substrate uses the MCP SDK 2.0 split-package layout (ESM-only —
-your consuming package needs `"type": "module"`) and requires an explicit
+The v0.2 substrate uses the MCP SDK 2.0 split-package layout (on the RC
+tags the SDK prereleases are ESM-only — your consuming package needs
+`"type": "module"`; SDK `2.0.0` final, the `v0.2.0` substrate, also ships
+CJS entry points) and requires an explicit
 `gif_session_id` argument on every governed tool call. See
 [`docs/migrations/v0.1-to-v0.2.md`](../../migrations/v0.1-to-v0.2.md) for the
 full adopter contract — package.json changes, ESM requirement, session-handle
