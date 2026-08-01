@@ -134,7 +134,7 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 
 The RC line tracked MCP SDK 2.0 prereleases through the spec RC window. The MCP SDK finalized at `2.0.0` on 2026-07-27 and the `2026-07-28` MCP specification published on 2026-07-28; `v0.2.0` pins the final SDK and hosts via its `createMcpHandler` layer, serving the `2026-07-28` protocol revision (`server/discover`, cache envelopes) to modern clients and 2025-era clients via the SDK's built-in stateless fallback. `v0.2.0-rc.4` (SDK `2.0.0-beta.1`) remains available for adopters mid-upgrade.
 
-**Legacy (`v0.1.0`).** `v0.1.0` is the pre-session-handle release on the retired MCP SDK v1 substrate. It is no longer recommended: it predates the SQL-identifier hardening on the v0.2 line (PR #29 — caller-supplied filter and column names reached `db_read`/`db_write` queries unescaped) and receives no backports. Existing v0.1.x adopters should upgrade via [`docs/migrations/v0.1-to-v0.2.md`](docs/migrations/v0.1-to-v0.2.md).
+**Legacy (`v0.1.0`).** `v0.1.0` is the pre-session-handle release on the retired MCP SDK v1 substrate. It is no longer recommended: it lacks the SQL-identifier hardening (PR #29 — caller-supplied filter and column names reached `db_read`/`db_write` queries unescaped; advisory [GHSA-47gp-w74f-grvr](https://github.com/notboatanchor/gif/security/advisories/GHSA-47gp-w74f-grvr)) and receives no backports. The injection affects every tag up to and including `v0.2.0-rc.1` — the first patched tag is `v0.2.0-rc.2`. Existing v0.1.x adopters should upgrade via [`docs/migrations/v0.1-to-v0.2.md`](docs/migrations/v0.1-to-v0.2.md).
 
 Shipped capabilities:
 
