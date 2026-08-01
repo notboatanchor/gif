@@ -184,6 +184,21 @@ export function createEnforcement(pool: Pool) {
       ttlSeconds:   number;
     }) => _validateSessionHandle(pool, params),
 
+    // Direct audit emission for adopter-side events. Never throws — audit
+    // failure must not mask the tool response (errors are logged and
+    // swallowed).
+    //
+    // Constraint on the string params that enter the hashed canonical
+    // preimage (eventType, toolName, outcome, purposeDeclared — sourceRef,
+    // sourcesActed, and humanActorId are stored but not hashed): they must
+    // not contain control characters (C0 U+0000-U+001F or DEL U+007F). The
+    // audit trigger hashes such a row without complaint (it never throws),
+    // but the chain verifier rejects control characters in protected
+    // strings (src/audit/verify-core.ts, normalizeString), leaving the row
+    // permanently unrecomputable and the whole chain failing verification.
+    // gif's own tools reject these values at the input boundary
+    // (src/tools/arg-guards.ts); adopters calling logAuditEvent directly
+    // must apply an equivalent guard to caller-supplied strings.
     logAuditEvent: (params: {
       personaId:        string;
       sessionId:        string | null;

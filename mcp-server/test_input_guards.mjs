@@ -390,6 +390,27 @@ for (const field of ['issuing_entity', 'purpose', 'created_by', 'valid_until']) 
   }
 }
 
+// persona_create: a control character embedded in any guarded field is
+// rejected at the handler with the audited isError return — the
+// chain-poisoning path the guard exists for (a purpose carrying an embedded
+// newline is copied into purpose_declared on every audit row and can never
+// be recomputed by the verifier). The exact message pins the guard's
+// control-character branch, distinct from the blank-string branch above.
+for (const field of ['issuing_entity', 'purpose', 'created_by', 'valid_until']) {
+  const result = await executePersonaCreate(
+    { ...validCreateArgs, [field]: 'pasted line one\nline two' },
+    managerPersona,
+    SESSION_ID,
+  );
+  const msg = errorText(result);
+  if (result.isError === true && msg === `${field} must not contain control characters`) {
+    pass(`persona_create rejects ${field} with an embedded newline (audited handler-level isError)`);
+  } else {
+    fail(`persona_create rejects ${field} with an embedded newline`,
+      `isError=${result.isError} error=${JSON.stringify(msg)}`);
+  }
+}
+
 // persona_create: scope_definition that parses to a non-object is rejected —
 // a JSON null would survive JSONB NOT NULL and mint a persona whose scope
 // checks throw on every governed call.

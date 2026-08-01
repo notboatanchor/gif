@@ -83,7 +83,12 @@ export function findMissingRequiredArg(required, args) {
  *   NEL) pass the verifier and cannot poison the chain, but they are still
  *   control characters in governance text. A guard stricter than the
  *   verifier is divergence-safe; the verifier itself is canonical-form
- *   contract and is not widened here.
+ *   contract and is not widened here. Only the control-character half of
+ *   the verifier's normalizeString is mirrored; its other rejection — the
+ *   8192-char length cap (MAX_FIELD_LEN) — needs no input-boundary twin,
+ *   because the one guarded value that reaches the hashed preimage
+ *   (purpose, copied to purpose_declared) is bounded far below the cap by
+ *   its VARCHAR(1000) column (schema/001_gif_core.sql:85).
  *
  * This is the audited in-handler value-guard path per GIF-022 §C2.7 — do
  * NOT express the control-character rule as an inputSchema `pattern`, which
