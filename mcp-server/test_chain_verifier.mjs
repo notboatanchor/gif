@@ -60,14 +60,17 @@ function fail(label, detail) {
 }
 
 // ---------------------------------------------------------------------------
-// Pure functions — replicated from verify_audit_chain.ts for plain-node
-// testability (no build step needed). The verifier's CLI entry runs at module
-// top level (opens a Pool, calls process.exit), so it cannot be imported here;
-// these MUST stay byte-identical to the .ts implementation and to the DB
-// trigger (migration 014). The known-answer test below guards this replica
-// against silent drift from the canonical form (gif-audit/1).
+// Pure functions — an independent REPLICA of the shipped canonicalizer
+// (src/audit/verify-core.ts). The shipped module is importable from dist/ and
+// is pinned to the same known-answer digests by test_verify_core.mjs; this
+// replica stays DELIBERATELY independent rather than importing it — two
+// derivations agreeing on an externally derived digest is stronger evidence
+// than one derivation checked against itself. These MUST stay byte-identical
+// to the .ts implementation and to the DB trigger (migration 014). The
+// known-answer test below guards this replica against silent drift from the
+// canonical form (gif-audit/1).
 //
-// Canonical form: sorted-key JSON. See verify_audit_chain.ts and the
+// Canonical form: sorted-key JSON. See src/audit/verify-core.ts and the
 // vendor-neutral reference vectors.
 // ---------------------------------------------------------------------------
 
