@@ -58,7 +58,7 @@ function fail(label, detail) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// gif-audit/2 canonicalizer (replica of verify_audit_chain.ts; guarded
+// gif-audit/2 canonicalizer (replica of src/audit/verify-core.ts; guarded
 // against drift from the reference vectors by the KAT in test_chain_verifier.mjs).
 const MAX_FIELD_LEN = 8192;
 
@@ -93,7 +93,7 @@ function canonicalize(value) {
 
 // Build the gif-audit/2 canonical body from a row whose fields are shaped as fetched
 // (occurred_at = ms-RFC3339 string, flagged = boolean), then SHA-256 it. Mirrors
-// buildBodyV2() in verify_audit_chain.ts and the migration-015 trigger.
+// buildBodyV2() in src/audit/verify-core.ts and the migration-015 trigger.
 function recomputeCanonicalHash(row) {
   const body = {
     event_id:      row.event_id,
