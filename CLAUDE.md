@@ -107,7 +107,8 @@ parsed once at process startup with fail-fast on misconfig (non-finite or
 non-positive). See GIF-020, GIF-022 §C2.
 
 **Enforcement, audit, and schema changes require review before merge.** Any
-change touching `schema/`, `mcp-server/src/tools/`, `mcp-server/src/enforcement.ts`,
+change touching `schema/`, `mcp-server/src/tools/`, `mcp-server/src/audit/`,
+`mcp-server/src/enforcement.ts`,
 or the audit trail must pass a code + security review and a clean-install
 (`npm ci`) test run before merge. These layers carry the framework's security
 and tamper-evidence guarantees; the review gate is mandatory for them, not
@@ -115,8 +116,9 @@ optional. Do not merge enforcement/audit/schema work on an in-session "green"
 alone — verify on a clean install.
 
 **Audit canonical form is byte-identical across all four implementations.** The
-PG trigger (`schema/0NN_audit_canonical_json*.sql`), the `verify_audit_chain.ts`
-verifier (`buildBody*`), the `.mjs` test-harness replicas, and the published
+PG trigger (`schema/0NN_audit_canonical_json*.sql`), the verifier core
+(`mcp-server/src/audit/verify-core.ts`, `buildBody*` — the CLI
+`verify_audit_chain.ts` is its DB shell), the `.mjs` test-harness replicas, and the published
 conformance-vector canonicalizer
 (`mcp-server/conformance/audit-record-contract/`) must produce byte-identical
 canonical preimages — the hash chain's tamper-evidence is only as trustworthy as
