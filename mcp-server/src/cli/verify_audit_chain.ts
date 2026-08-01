@@ -23,9 +23,13 @@
 //
 // Walks every month partition in gif.audit_events, recomputes the SHA-256
 // preimage for each hashed row, and checks linkage (previous_hash continuity).
-// Exits 0 only when zero mismatches, zero linkage breaks, and zero anchor
-// failures are found. HASH_ERROR sentinel rows surface as warnings but do not
-// fail the exit code — they record a write-time compute failure, not tamper.
+// Exits 0 only when zero mismatches, zero linkage breaks, zero anchor
+// failures, AND zero unrecomputable rows (recognized canon_version whose
+// normalization the verifier rejects — e.g. a control character in a
+// protected string) are found. HASH_ERROR sentinel rows surface as warnings
+// but do not fail the exit code — they record a write-time compute failure,
+// not tamper. Rows under an unrecognized (future) canon_version stay
+// informational (uncheckable) and do not fail the exit code.
 //
 // Flags:
 //   --check-anchors   Also verify rows in gif.audit_chain_anchors: each

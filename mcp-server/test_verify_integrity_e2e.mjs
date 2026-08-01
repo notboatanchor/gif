@@ -48,6 +48,18 @@ import pg from 'pg';
 
 import { verifyChain } from './dist/audit/verify-core.js';
 
+// Destructive-fixture gate: this test permanently appends unverifiable rows
+// to whatever database the env points at (INSERT-only — no cleanup exists by
+// design). scripts/test-local.sh and CI set the gate against gif's own
+// disposable compose stack; a bare `npm test` pointed at the wrong database
+// (a documented recurring hazard) skips instead of poisoning it.
+if (process.env.GIF_AUDIT_E2E !== '1') {
+  console.log('\nVerify-Path Integrity — End-to-End: SKIPPED');
+  console.log('  (set GIF_AUDIT_E2E=1 — this test permanently appends unverifiable');
+  console.log('   rows to the target audit chain; run it only against a disposable DB)\n');
+  process.exit(0);
+}
+
 const { Pool } = pg;
 
 const dbConfig = {

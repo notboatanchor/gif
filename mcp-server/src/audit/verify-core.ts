@@ -358,10 +358,13 @@ export function verifyPartition(partitionKey: string, rows: AuditRow[]): Partiti
     // This is a real hashed row. Attempt to recompute its canonical hash.
     // Two distinct cannot-recompute causes get opposite treatment: an
     // unrecognized canon_version (recomputeHash → null) is forward-safety —
-    // informational `uncheckable` — while a normalization rejection (throw)
-    // on a RECOGNIZED version is an unverifiable row in a tamper-evidence
-    // chain — `unrecomputable`, which fails verification. Neither is
-    // reported as tamper.
+    // informational `uncheckable` — while ANY throw out of recomputeHash on
+    // a RECOGNIZED version is an unverifiable row in a tamper-evidence
+    // chain — `unrecomputable`, which fails verification. In practice the
+    // throw is normalizeString's control-character / length-cap rejection;
+    // canonicalize's other throw branches (non-finite number,
+    // uncanonicalizable value) are unreachable for AuditRow-shaped input.
+    // Neither cause is reported as tamper.
     // Precedence note: an unrecognized canon_version short-circuits in
     // recomputeHash BEFORE normalization ever runs, so a row that is both
     // forward-format AND normalization-poisoned files as informational
