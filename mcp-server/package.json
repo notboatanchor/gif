@@ -1,6 +1,6 @@
 {
   "name": "gif-enforcement",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "GIF MCP server — AI tool interface and persona enforcement layer",
   "license": "Apache-2.0",
   "type": "module",
