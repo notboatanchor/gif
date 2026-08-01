@@ -76,5 +76,11 @@ together, with credit to the reporter if they want it.
 
 ## Past Advisories
 
-None at this time. Future advisories will be published as GitHub Security
-Advisories on this repository.
+- [GHSA-47gp-w74f-grvr](https://github.com/notboatanchor/gif/security/advisories/GHSA-47gp-w74f-grvr)
+  (published 2026-07-31) — SQL injection via caller-supplied column identifiers
+  in `db_read`/`db_write`. High, CVSS 8.1, CWE-89. Affects every tag up to and
+  including `v0.2.0-rc.1`; first patched tag is `v0.2.0-rc.2` (PR #29). No CVE
+  was requested; the advisory states the condition that would reverse that.
+
+Future advisories will be published as GitHub Security Advisories on this
+repository.

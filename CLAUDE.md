@@ -139,14 +139,30 @@ prose. A misread "`GovernanceReviewStatus` enum drift" claim, recorded without
 checking the type definition, rode ~15 sessions into a public conformance
 comment before it was caught (retracted PR #32, 2026-06-12).
 
+**Priority claims name their mechanism; precedent claims quote their source.**
+Two claim types adjacent to the rule above, added 2026-08-01 after every
+retraction in the preceding sprint traced to one of them.
+*Priority:* any assertion that deferring something raises risk, or that X is
+the next thing to do, must name the **mechanism** by which cost accrues — what
+event makes it worse, and how. Without a mechanism it is recorded as a
+preference, not a priority. "The one open item where deferring raises risk over
+time" was entered into project state without one and steered the plan of record
+for two sessions before it was demoted.
+*Precedent:* invoking a prior decision as justification requires **re-reading
+that decision and quoting the load-bearing clause in the same edit** — never
+citing from recall. A published advisory was cited as precedent for publishing
+a second one; re-reading `SECURITY.md` showed the first rested on the flaw
+already being public, which the second was not, and the precedent was withdrawn.
+
 ---
 
 ## Compliance Hardening Roadmap
 
 Near-term items before first regulated-industry deployment:
-- Cryptographic log signing — chain verifier CLI (hash chain trigger landed
-  in migration 006; verifier walks partitions, recomputes SHA-256, reports
-  mismatches and chain breaks)
+- Cryptographic log signing — not yet implemented; distinct from chain
+  *verification*, which is done (hash chain trigger landed in migration 006;
+  the verifier CLI walks partitions, recomputes SHA-256, reports mismatches
+  and chain breaks)
 - External timestamping anchors for the audit hash chain
 - User-to-persona identity binding with verification — provisioner accountability
   is done (mandatory `identity_token` at `persona_create`); runtime session
