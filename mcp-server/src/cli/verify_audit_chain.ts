@@ -201,7 +201,9 @@ function renderHuman(result: ChainVerifyResult): string {
   lines.push('');
 
   for (const p of result.partitions) {
-    const status = (p.mismatches.length === 0 && p.breaks.length === 0) ? 'OK' : 'FAIL';
+    const status =
+      (p.mismatches.length === 0 && p.breaks.length === 0 && p.unrecomputable.length === 0)
+        ? 'OK' : 'FAIL';
     lines.push(`Partition: ${p.partition}  [${status}]`);
     lines.push(`  Total rows     : ${String(p.total_rows)}`);
     lines.push(`  Hashed checked : ${String(p.hashed_checked)}`);
@@ -216,8 +218,15 @@ function renderHuman(result: ChainVerifyResult): string {
     }
 
     if (p.uncheckable.length > 0) {
-      lines.push(`  NOTE — Uncheckable rows (unrecognized canon_version or normalization rejection; not tamper):`);
+      lines.push(`  NOTE — Uncheckable rows (unrecognized canon_version; informational, not tamper):`);
       for (const id of p.uncheckable) {
+        lines.push(`    ${id}`);
+      }
+    }
+
+    if (p.unrecomputable.length > 0) {
+      lines.push(`  INTEGRITY FAIL — Unrecomputable rows (recognized canon_version, normalization rejection — these rows cannot be attested):`);
+      for (const id of p.unrecomputable) {
         lines.push(`    ${id}`);
       }
     }
@@ -262,7 +271,8 @@ function renderHuman(result: ChainVerifyResult): string {
   lines.push(`  Mismatches      : ${String(result.total_mismatches)}`);
   lines.push(`  Linkage breaks  : ${String(result.total_breaks)}`);
   lines.push(`  HASH_ERROR rows : ${String(result.total_hash_errors)}  (warnings only)`);
-  lines.push(`  Uncheckable rows: ${String(result.total_uncheckable)}  (informational only)`);
+  lines.push(`  Uncheckable rows: ${String(result.total_uncheckable)}  (unrecognized canon_version; informational only)`);
+  lines.push(`  Unrecomputable  : ${String(result.total_unrecomputable)}  (normalization rejection; fails verification)`);
   if (result.anchors !== null) {
     lines.push(`  Anchor failures : ${String(result.total_anchor_fails)}`);
   }
