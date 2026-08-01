@@ -127,7 +127,7 @@ spec:
   template:
     spec:
       containers:
-        - image: gif-mcp-server:v0.2.0
+        - image: gif-mcp-server:v0.2.1
           env:
             - name: GIF_APP_PASSWORD
               valueFrom:
