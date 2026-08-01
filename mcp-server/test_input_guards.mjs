@@ -157,6 +157,42 @@ if (nonEmptyStringArgError([['purpose', 'real purpose'], ['created_by', 'ops']])
   fail('nonEmptyStringArgError accepts non-empty strings');
 }
 
+// Control characters (C0 + DEL) embedded in an otherwise non-empty string:
+// they survive .trim(), and via persona.purpose they reach purpose_declared
+// inside the hashed audit canonical form, where the verifier's
+// normalizeString rejects them — the row hashes fine at emit and can never
+// be recomputed at verify. Rejected for every guarded field, not just
+// purpose.
+for (const [value, label] of [
+  ['two\nlines', 'embedded newline (pasted multi-line string)'],
+  ['tab\there', 'embedded tab'],
+  ['nul\u0000byte', 'embedded NUL'],
+  ['esc\u001bsequence', 'embedded ESC'],
+  ['del\u007fchar', 'embedded DEL'],
+]) {
+  const msg = nonEmptyStringArgError([['purpose', value]]);
+  if (typeof msg === 'string' && msg.includes('control character')) {
+    pass(`nonEmptyStringArgError rejects ${label}`);
+  } else {
+    fail(`nonEmptyStringArgError rejects ${label}`, `got ${JSON.stringify(msg)}`);
+  }
+}
+// Same rule on a non-purpose field — the guard is deliberately broad.
+{
+  const msg = nonEmptyStringArgError([['reason', 'line one\nline two']]);
+  if (typeof msg === 'string' && msg.includes('reason') && msg.includes('control character')) {
+    pass('nonEmptyStringArgError rejects control characters in reason (broad rule, all guarded fields)');
+  } else {
+    fail('nonEmptyStringArgError rejects control characters in reason', `got ${JSON.stringify(msg)}`);
+  }
+}
+// Boundary: U+0020 and printable non-ASCII are NOT control characters.
+if (nonEmptyStringArgError([['purpose', 'spaces are fine'], ['created_by', 'café ops']]) === null) {
+  pass('nonEmptyStringArgError accepts spaces and printable non-ASCII');
+} else {
+  fail('nonEmptyStringArgError accepts spaces and printable non-ASCII');
+}
+
 // jsonObjectArgError
 for (const [value, label] of [
   [null, "JSON 'null'"],
