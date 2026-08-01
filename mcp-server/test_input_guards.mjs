@@ -157,6 +157,44 @@ if (nonEmptyStringArgError([['purpose', 'real purpose'], ['created_by', 'ops']])
   fail('nonEmptyStringArgError accepts non-empty strings');
 }
 
+// Control characters (C0 + DEL) embedded in an otherwise non-empty string:
+// they survive .trim(), and via persona.purpose they reach purpose_declared
+// inside the hashed audit canonical form, where the verifier's
+// normalizeString rejects them — the row hashes fine at emit and can never
+// be recomputed at verify. Rejected for every guarded field, not just
+// purpose.
+for (const [value, label] of [
+  ['two\nlines', 'embedded newline (pasted multi-line string)'],
+  ['tab\there', 'embedded tab'],
+  ['nul\u0000byte', 'embedded NUL'],
+  ['esc\u001bsequence', 'embedded ESC'],
+  ['del\u007fchar', 'embedded DEL'],
+  ['nel\u0085break', 'embedded NEL (C1 control)'],
+  ['c1\u009fchar', 'embedded U+009F (C1 control)'],
+]) {
+  const msg = nonEmptyStringArgError([['purpose', value]]);
+  if (typeof msg === 'string' && msg.includes('control character')) {
+    pass(`nonEmptyStringArgError rejects ${label}`);
+  } else {
+    fail(`nonEmptyStringArgError rejects ${label}`, `got ${JSON.stringify(msg)}`);
+  }
+}
+// Same rule on a non-purpose field — the guard is deliberately broad.
+{
+  const msg = nonEmptyStringArgError([['reason', 'line one\nline two']]);
+  if (typeof msg === 'string' && msg.includes('reason') && msg.includes('control character')) {
+    pass('nonEmptyStringArgError rejects control characters in reason (broad rule, all guarded fields)');
+  } else {
+    fail('nonEmptyStringArgError rejects control characters in reason', `got ${JSON.stringify(msg)}`);
+  }
+}
+// Boundary: U+0020 and printable non-ASCII are NOT control characters.
+if (nonEmptyStringArgError([['purpose', 'spaces are fine'], ['created_by', 'café ops']]) === null) {
+  pass('nonEmptyStringArgError accepts spaces and printable non-ASCII');
+} else {
+  fail('nonEmptyStringArgError accepts spaces and printable non-ASCII');
+}
+
 // jsonObjectArgError
 for (const [value, label] of [
   [null, "JSON 'null'"],
@@ -349,6 +387,27 @@ for (const field of ['issuing_entity', 'purpose', 'created_by', 'valid_until']) 
     } else {
       fail(`persona_create rejects ${field} = ${label}`, `isError=${result.isError} error=${JSON.stringify(msg)}`);
     }
+  }
+}
+
+// persona_create: a control character embedded in any guarded field is
+// rejected at the handler with the audited isError return — the
+// chain-poisoning path the guard exists for (a purpose carrying an embedded
+// newline is copied into purpose_declared on every audit row and can never
+// be recomputed by the verifier). The exact message pins the guard's
+// control-character branch, distinct from the blank-string branch above.
+for (const field of ['issuing_entity', 'purpose', 'created_by', 'valid_until']) {
+  const result = await executePersonaCreate(
+    { ...validCreateArgs, [field]: 'pasted line one\nline two' },
+    managerPersona,
+    SESSION_ID,
+  );
+  const msg = errorText(result);
+  if (result.isError === true && msg === `${field} must not contain control characters`) {
+    pass(`persona_create rejects ${field} with an embedded newline (audited handler-level isError)`);
+  } else {
+    fail(`persona_create rejects ${field} with an embedded newline`,
+      `isError=${result.isError} error=${JSON.stringify(msg)}`);
   }
 }
 

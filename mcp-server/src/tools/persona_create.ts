@@ -143,9 +143,12 @@ export async function executePersonaCreate(
   }
 
   // Runtime form of the declared string constraints (minLength 1; whitespace-
-  // only also rejected). The DB's NOT NULL catches absent values but not empty
-  // or blank strings — and a persona with a blank purpose would defeat the
-  // purpose-non-nullable guarantee.
+  // only and control characters also rejected). The DB's NOT NULL catches
+  // absent values but not empty or blank strings — and a persona with a blank
+  // purpose would defeat the purpose-non-nullable guarantee. A control
+  // character in purpose would poison the audit chain: copied into
+  // purpose_declared on every row, hashed by the trigger, unrecomputable by
+  // the verifier (see nonEmptyStringArgError's doc).
   const stringArgError = nonEmptyStringArgError([
     ['issuing_entity', args.issuing_entity],
     ['purpose',        args.purpose],
