@@ -169,6 +169,8 @@ for (const [value, label] of [
   ['nul\u0000byte', 'embedded NUL'],
   ['esc\u001bsequence', 'embedded ESC'],
   ['del\u007fchar', 'embedded DEL'],
+  ['nel\u0085break', 'embedded NEL (C1 control)'],
+  ['c1\u009fchar', 'embedded U+009F (C1 control)'],
 ]) {
   const msg = nonEmptyStringArgError([['purpose', value]]);
   if (typeof msg === 'string' && msg.includes('control character')) {

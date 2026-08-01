@@ -12,7 +12,7 @@ export declare function findMissingRequiredArg(required: readonly string[] | und
  *
  * - Whitespace-only values are rejected — a purpose or reason of ' '
  *   satisfies minLength but carries zero governance content.
- * - Control characters (C0 + DEL) are rejected. They survive `.trim()`
+ * - Control characters (C0, DEL, and C1) are rejected. They survive `.trim()`
  *   (an embedded `\n` in a pasted multi-line string is the ordinary case),
  *   and a persona purpose carrying one is copied into `purpose_declared`
  *   on every audit row the persona generates — inside the hashed canonical
@@ -21,7 +21,12 @@ export declare function findMissingRequiredArg(required: readonly string[] | und
  *   row without complaint (it never throws), producing a row that can
  *   never be recomputed. No guarded governance-metadata string legitimately
  *   contains a control character, so the rule is applied to every field
- *   this helper covers, not just purpose.
+ *   this helper covers, not just purpose. Deliberately WIDER than the
+ *   verifier's rejection set (C0+DEL): C1 controls (U+0080-U+009F, e.g.
+ *   NEL) pass the verifier and cannot poison the chain, but they are still
+ *   control characters in governance text. A guard stricter than the
+ *   verifier is divergence-safe; the verifier itself is canonical-form
+ *   contract and is not widened here.
  *
  * This is the audited in-handler value-guard path per GIF-022 §C2.7 — do
  * NOT express the control-character rule as an inputSchema `pattern`, which
