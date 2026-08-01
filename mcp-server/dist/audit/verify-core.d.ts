@@ -79,6 +79,7 @@ export interface PartitionResult {
     breaks: string[];
     hash_errors: string[];
     uncheckable: string[];
+    unrecomputable: string[];
     legacy_null: number;
 }
 /** Anchor verification result. */
@@ -98,6 +99,7 @@ export interface ChainVerifyResult {
     total_breaks: number;
     total_hash_errors: number;
     total_uncheckable: number;
+    total_unrecomputable: number;
     total_anchor_fails: number;
     ok: boolean;
 }
@@ -123,8 +125,9 @@ export interface ChainVerifyResult {
  * NOT reject control chars or cap length (it must never throw — audit-never-
  * throws). For gif's controlled-vocabulary / persona.purpose inputs the two agree
  * byte-for-byte; a string that trips the control-char/cap throw here is surfaced
- * as `uncheckable`, never as tamper. Closing that emit-vs-verify divergence (the
- * `uncheckable` hole) is a tracked follow-up, separate from this trim-charset fix.
+ * as `unrecomputable` — it fails verification without being reported as tamper.
+ * Making the trigger itself reject what the verifier rejects is a
+ * canonical-semantics change gated on an ADR, tracked separately.
  */
 export declare const MAX_FIELD_LEN = 8192;
 export declare function normalizeString(s: string): string;
@@ -173,9 +176,11 @@ export declare function recomputeHash(row: AuditRow): string | null;
  * Per-row categories:
  *   - legacy_null:   event_hash IS NULL  → skip verification, count only
  *   - hash_error:    event_hash = 'HASH_ERROR' → write-time sentinel, skip
- *   - uncheckable:   unrecognized canon_version or normalization rejection →
- *                    cannot recompute, NOT tamper (forward-safety)
- *   - hashed:        64-char hex event_hash → recompute + linkage check
+ *   - uncheckable:    unrecognized canon_version → cannot recompute, NOT tamper
+ *                     (forward-safety, informational)
+ *   - unrecomputable: recognized canon_version, normalization rejection →
+ *                     unverifiable row, fails verification (not reported as tamper)
+ *   - hashed:         64-char hex event_hash → recompute + linkage check
  */
 export declare function verifyPartition(partitionKey: string, rows: AuditRow[]): PartitionResult;
 /**

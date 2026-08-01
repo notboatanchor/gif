@@ -234,6 +234,69 @@ const KAT_CG2_DIGEST = 'd494769c1ae442ea88dd190068747abf63c0568a3b856f85791b1a50
 }
 
 // ---------------------------------------------------------------------------
+// Test 5: uncheckable/unrecomputable split, DB-free — a poisoned row in a
+// RECOGNIZED canonical form fails verification; a row under an unknown
+// (future) canon_version stays informational. Pins the shipped split logic
+// without a database; the DB-backed end-to-end lives in
+// test_verify_integrity_e2e.mjs.
+// ---------------------------------------------------------------------------
+
+{
+  const cleanRow = {
+    event_id:              'bbbbbbbb-0000-0000-0000-000000000001',
+    occurred_at:           '2026-06-07T09:00:00.000Z',
+    persona_id:            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    session_id:            '55555555-5555-5555-5555-555555555555',
+    event_type:            'tool_call',
+    tool_name:             'db_read',
+    outcome:               'allowed',
+    flagged:               false,
+    purpose_declared:      'ordinary purpose',
+    invoked_by_persona_id: null,
+    canon_version:         'gif-audit/2',
+    previous_hash:         null,
+  };
+  const monthKey = '2026-06-01T00:00:00.000Z';
+
+  // Poisoned: control character in purpose_declared, recognized /2 format.
+  // The stored hash value is irrelevant — recomputation throws before any
+  // comparison — but it must be 64-hex so the row counts as a real hashed row.
+  const poisoned = {
+    ...cleanRow,
+    event_id:         'bbbbbbbb-0000-0000-0000-00000000000e',
+    purpose_declared: 'diligence read\nsecond line',
+    event_hash:       'e'.repeat(64),
+  };
+  const pr = verifyChain(new Map([[monthKey, [poisoned]]]), null);
+  if (pr.ok === false &&
+      pr.total_unrecomputable === 1 &&
+      pr.total_uncheckable === 0 &&
+      pr.partitions[0].unrecomputable[0] === poisoned.event_id) {
+    pass('(5) poisoned /2 row → unrecomputable, chain NOT ok (shipped split logic)');
+  } else {
+    fail('(5) poisoned /2 row → unrecomputable, chain NOT ok',
+         JSON.stringify({ ok: pr.ok, unrec: pr.total_unrecomputable, unch: pr.total_uncheckable }));
+  }
+
+  // Forward-safety: unknown canon_version → informational, chain stays ok.
+  const future = {
+    ...cleanRow,
+    event_id:      'bbbbbbbb-0000-0000-0000-00000000000f',
+    canon_version: 'gif-audit/99',
+    event_hash:    'f'.repeat(64),
+  };
+  const fr = verifyChain(new Map([[monthKey, [future]]]), null);
+  if (fr.ok === true &&
+      fr.total_uncheckable === 1 &&
+      fr.total_unrecomputable === 0) {
+    pass('(5) unknown canon_version row → uncheckable-informational, chain ok (forward-safety)');
+  } else {
+    fail('(5) unknown canon_version row → uncheckable-informational, chain ok',
+         JSON.stringify({ ok: fr.ok, unch: fr.total_uncheckable, unrec: fr.total_unrecomputable }));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Final summary
 // ---------------------------------------------------------------------------
 

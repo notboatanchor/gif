@@ -170,6 +170,7 @@ function verifyPartition(partitionKey, rows) {
     breaks:          [],
     hash_errors:     [],
     uncheckable:     [],
+    unrecomputable:  [],
     legacy_null:     0,
   };
 
@@ -192,16 +193,18 @@ function verifyPartition(partitionKey, rows) {
       continue;
     }
 
-    // Unrecognized canon_version (null) or normalization rejection (throw) →
-    // uncheckable, never tamper (forward-safety).
-    let expected;
+    // Unrecognized canon_version (null) → uncheckable (forward-safety,
+    // informational); normalization rejection (throw) on a recognized
+    // version → unrecomputable, which fails verification. Neither is tamper.
+    let expected = null;
+    let normalizationRejected = false;
     try {
       expected = recomputeHash(row);
     } catch {
-      expected = null;
+      normalizationRejected = true;
     }
     if (expected === null) {
-      result.uncheckable.push(row.event_id);
+      (normalizationRejected ? result.unrecomputable : result.uncheckable).push(row.event_id);
       prevHashedHash = row.event_hash;
       isFirstHashed  = false;
       continue;
@@ -267,6 +270,7 @@ function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLookup) {
   const total_breaks       = partitions.reduce((s, p) => s + p.breaks.length, 0);
   const total_hash_errors  = partitions.reduce((s, p) => s + p.hash_errors.length, 0);
   const total_uncheckable  = partitions.reduce((s, p) => s + p.uncheckable.length, 0);
+  const total_unrecomputable = partitions.reduce((s, p) => s + p.unrecomputable.length, 0);
   const total_anchor_fails = anchorResults
     ? anchorResults.filter(a => a.status !== 'ok').length
     : 0;
@@ -278,8 +282,10 @@ function verifyChain(partitionMap, anchors, liveHashLookup, liveCountLookup) {
     total_breaks,
     total_hash_errors,
     total_uncheckable,
+    total_unrecomputable,
     total_anchor_fails,
-    ok: total_mismatches === 0 && total_breaks === 0 && total_anchor_fails === 0,
+    ok: total_mismatches === 0 && total_breaks === 0 && total_anchor_fails === 0 &&
+        total_unrecomputable === 0,
   };
 }
 

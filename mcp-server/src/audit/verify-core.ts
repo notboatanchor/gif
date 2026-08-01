@@ -120,9 +120,13 @@ export interface PartitionResult {
   mismatches:       string[]; // event_ids where recomputed hash ≠ stored event_hash
   breaks:           string[]; // event_ids where previous_hash linkage is broken
   hash_errors:      string[]; // event_ids with event_hash = 'HASH_ERROR' (write-time sentinel)
-  uncheckable:      string[]; // event_ids the verifier cannot recompute: an unrecognized
-                              // canon_version (forward-safety) or a normalization rejection.
+  uncheckable:      string[]; // event_ids with an unrecognized canon_version — rows written
+                              // under a newer/unknown canonical form (forward-safety).
                               // Informational — does NOT fail the chain (not evidence of tamper).
+  unrecomputable:   string[]; // event_ids in a RECOGNIZED canon_version that normalization
+                              // rejects (e.g. a control character in a protected string).
+                              // The verifier knows the format and still cannot recompute —
+                              // an unverifiable row in a tamper-evidence chain. Fails ok.
   legacy_null:      number;   // rows with event_hash IS NULL (pre-migration-006)
 }
 
@@ -144,8 +148,9 @@ export interface ChainVerifyResult {
   total_breaks:       number;
   total_hash_errors:  number;
   total_uncheckable:  number;
+  total_unrecomputable: number;
   total_anchor_fails: number;
-  ok:                 boolean; // true iff zero mismatches + breaks + anchor_fails
+  ok:                 boolean; // true iff zero mismatches + breaks + anchor_fails + unrecomputable
 }
 
 // ---------------------------------------------------------------------------
@@ -174,8 +179,9 @@ export interface ChainVerifyResult {
  * NOT reject control chars or cap length (it must never throw — audit-never-
  * throws). For gif's controlled-vocabulary / persona.purpose inputs the two agree
  * byte-for-byte; a string that trips the control-char/cap throw here is surfaced
- * as `uncheckable`, never as tamper. Closing that emit-vs-verify divergence (the
- * `uncheckable` hole) is a tracked follow-up, separate from this trim-charset fix.
+ * as `unrecomputable` — it fails verification without being reported as tamper.
+ * Making the trigger itself reject what the verifier rejects is a
+ * canonical-semantics change gated on an ADR, tracked separately.
  */
 export const MAX_FIELD_LEN = 8192;
 
@@ -307,9 +313,11 @@ export function recomputeHash(row: AuditRow): string | null {
  * Per-row categories:
  *   - legacy_null:   event_hash IS NULL  → skip verification, count only
  *   - hash_error:    event_hash = 'HASH_ERROR' → write-time sentinel, skip
- *   - uncheckable:   unrecognized canon_version or normalization rejection →
- *                    cannot recompute, NOT tamper (forward-safety)
- *   - hashed:        64-char hex event_hash → recompute + linkage check
+ *   - uncheckable:    unrecognized canon_version → cannot recompute, NOT tamper
+ *                     (forward-safety, informational)
+ *   - unrecomputable: recognized canon_version, normalization rejection →
+ *                     unverifiable row, fails verification (not reported as tamper)
+ *   - hashed:         64-char hex event_hash → recompute + linkage check
  */
 export function verifyPartition(partitionKey: string, rows: AuditRow[]): PartitionResult {
   const result: PartitionResult = {
@@ -321,6 +329,7 @@ export function verifyPartition(partitionKey: string, rows: AuditRow[]): Partiti
     breaks:          [],
     hash_errors:     [],
     uncheckable:     [],
+    unrecomputable:  [],
     legacy_null:     0,
   };
 
@@ -347,17 +356,31 @@ export function verifyPartition(partitionKey: string, rows: AuditRow[]): Partiti
     }
 
     // This is a real hashed row. Attempt to recompute its canonical hash.
-    // An unrecognized canon_version (recomputeHash → null) or a normalization
-    // rejection (throw) means the verifier cannot re-derive this row's hash;
-    // categorize as uncheckable (informational), never as tamper.
-    let expected: string | null;
+    // Two distinct cannot-recompute causes get opposite treatment: an
+    // unrecognized canon_version (recomputeHash → null) is forward-safety —
+    // informational `uncheckable` — while ANY throw out of recomputeHash on
+    // a RECOGNIZED version is an unverifiable row in a tamper-evidence
+    // chain — `unrecomputable`, which fails verification. In practice the
+    // throw is normalizeString's control-character / length-cap rejection;
+    // canonicalize's other throw branches (non-finite number,
+    // uncanonicalizable value) are unreachable for AuditRow-shaped input.
+    // Neither cause is reported as tamper.
+    // Precedence note: an unrecognized canon_version short-circuits in
+    // recomputeHash BEFORE normalization ever runs, so a row that is both
+    // forward-format AND normalization-poisoned files as informational
+    // uncheckable. Not reachable today (the trigger stamps canon_version
+    // unconditionally, 015_audit_canonical_json_v2.sql, and gif_app has no
+    // UPDATE on audit_events) — but any future migration introducing a new
+    // canon_version value must revisit this interaction deliberately.
+    let expected: string | null = null;
+    let normalizationRejected = false;
     try {
       expected = recomputeHash(row);
     } catch {
-      expected = null;
+      normalizationRejected = true;
     }
     if (expected === null) {
-      result.uncheckable.push(row.event_id);
+      (normalizationRejected ? result.unrecomputable : result.uncheckable).push(row.event_id);
       prevHashedHash = row.event_hash;
       isFirstHashed = false;
       continue;
@@ -489,6 +512,7 @@ export function verifyChain(
   const total_breaks       = partitions.reduce((s, p) => s + p.breaks.length, 0);
   const total_hash_errors  = partitions.reduce((s, p) => s + p.hash_errors.length, 0);
   const total_uncheckable  = partitions.reduce((s, p) => s + p.uncheckable.length, 0);
+  const total_unrecomputable = partitions.reduce((s, p) => s + p.unrecomputable.length, 0);
   const total_anchor_fails = anchorResults
     ? anchorResults.filter(a => a.status !== 'ok').length
     : 0;
@@ -500,7 +524,9 @@ export function verifyChain(
     total_breaks,
     total_hash_errors,
     total_uncheckable,
+    total_unrecomputable,
     total_anchor_fails,
-    ok: total_mismatches === 0 && total_breaks === 0 && total_anchor_fails === 0,
+    ok: total_mismatches === 0 && total_breaks === 0 && total_anchor_fails === 0 &&
+        total_unrecomputable === 0,
   };
 }
