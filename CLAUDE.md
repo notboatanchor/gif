@@ -150,9 +150,9 @@ time" was entered into project state without one and steered the plan of record
 for two sessions before it was demoted.
 *Precedent:* invoking a prior decision as justification requires **re-reading
 that decision and quoting the load-bearing clause in the same edit** — never
-citing from recall. A published advisory was cited as precedent for publishing
-a second one; re-reading `SECURITY.md` showed the first rested on the flaw
-already being public, which the second was not, and the precedent was withdrawn.
+citing from recall. A published advisory was cited from recall as precedent
+for a similar action; re-reading `SECURITY.md` showed the advisory rested on
+a condition that did not transfer, and the precedent was withdrawn.
 
 ---
 
