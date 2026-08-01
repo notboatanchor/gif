@@ -234,6 +234,13 @@ export function verifyPartition(partitionKey, rows) {
         // on a RECOGNIZED version is an unverifiable row in a tamper-evidence
         // chain — `unrecomputable`, which fails verification. Neither is
         // reported as tamper.
+        // Precedence note: an unrecognized canon_version short-circuits in
+        // recomputeHash BEFORE normalization ever runs, so a row that is both
+        // forward-format AND normalization-poisoned files as informational
+        // uncheckable. Not reachable today (the trigger stamps canon_version
+        // unconditionally, 015_audit_canonical_json_v2.sql, and gif_app has no
+        // UPDATE on audit_events) — but any future migration introducing a new
+        // canon_version value must revisit this interaction deliberately.
         let expected = null;
         let normalizationRejected = false;
         try {
