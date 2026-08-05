@@ -140,7 +140,7 @@ Shipped capabilities:
 
 - Persona lifecycle (create, activate, expire, revoke)
 - MCP enforcement layer with Streamable HTTP transport
-- Append-only audit trail (INSERT-only at database level), hash-chained with a chain-verifier CLI
+- Append-only audit trail (INSERT-only at database level), hash-chained with a chain-verifier CLI; chain writes serialize per month partition so concurrent tool calls cannot fork the chain (migration 016 — see [`docs/runbooks/adopter/production-deployment.md`](docs/runbooks/adopter/production-deployment.md) for the concurrency envelope)
 - Scope violation detection as first-class governance events
 - Delegation chain enforcement (scope subset rules, depth limits)
 - Session management as discrete governance events
@@ -149,7 +149,7 @@ Shipped capabilities:
 - Combination policy primitive (schema, active-policy evaluator, fail-closed semantics; adopter-invoked)
 - Provisioner identity binding (HMAC identity token issued by CLI; verified at persona_create; human_actor_id on every audit event)
 
-The compliance hardening roadmap (external timestamping anchors for the hash chain, encryption at rest, multi-tenant operational hardening) is documented in [`docs/gif-product-overview.md`](docs/gif-product-overview.md).
+The compliance hardening roadmap (external timestamping anchors for the hash chain, encryption at rest, multi-tenant operational hardening, per-scope audit chains for multi-tenant write volume) is documented in [`docs/gif-product-overview.md`](docs/gif-product-overview.md).
 
 ---
 

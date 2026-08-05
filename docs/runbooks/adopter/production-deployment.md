@@ -222,12 +222,115 @@ least 3 months from today. Any gap is a compliance risk.
 
 ---
 
-## 6. Pre-deployment checklist
+## 6. Concurrency Envelope and Connection Sizing
+
+### Audit-chain writes serialize per month partition
+
+As of migration 016, the audit hash-chain trigger takes a row lock
+(`SELECT ... FOR UPDATE` on a gif-owned per-month lock row in
+`gif.audit_chain_locks`) before reading the previous hash, and re-stamps
+`occurred_at` under that lock so chain order and sort order agree. Audit
+writes therefore serialize per month partition. The lock is held for the
+duration of a single INSERT — millisecond scale.
+
+**Why this exists:** in releases prior to migration 016 (all tags through
+`v0.2.1`), the trigger's previous-hash lookup ran unlocked. Two concurrent
+audit INSERTs could each link the same parent row, forking the chain. Because
+`previous_hash` is part of the hashed preimage and the table is INSERT-only,
+a fork can never be re-linked: the chain verifier reports it as a permanent
+linkage break. The verifier detects the condition loudly — the cost is a
+false tamper alarm that can never be cleared, not a silent integrity loss.
+Concurrent writes do not require multiple users: two overlapping tool calls,
+parallel tool calls from a single agent, or two adopter servers sharing one
+GIF database are each sufficient.
+
+No forks have been observed in a single-operator adopter with strictly
+serialized calls; that configuration cannot exercise the race. Observed
+inter-write gaps in that same adopter reach 3 ms, with ~38% of consecutive
+writes under 10 ms apart — so the absence of forks reflects absence of
+concurrent transactions, not headroom.
+
+**Operator guidance:**
+
+- In-place upgrades: apply migration 016 **before** introducing any
+  concurrent writer (a second adopter server, parallel tool calls, or
+  multiple simultaneous users). It is a standard migration — both install
+  paths apply it automatically on fresh installs.
+- Any pre-016 linkage breaks stand: audit rows are never rewritten. Document
+  the verifier finding and its cause; do not attempt repair.
+- The serialized ceiling is not a practical constraint at human scale. As a
+  reference point, 50 users each making 100 governed calls per hour is about
+  1.4 audit events per second — orders of magnitude below a
+  millisecond-scale serialized write path.
+- The lock deliberately has **no timeout** (a timeout would abort the INSERT
+  inside audit emission's never-throw path and silently drop the record — an
+  action without an audit row, the exact failure the trail exists to
+  prevent). The trade: a transaction left open mid-INSERT stalls all audit
+  writes on that database until it releases. This state is pathological and
+  operationally visible — stalled writers appear in `pg_stat_activity` with
+  `wait_event_type = 'Lock'`.
+
+### Connection pool sizing
+
+Each GIF server process opens a pool of at most 10 Postgres connections
+(`mcp-server/src/db.ts`). Two sizing rules:
+
+- **Fleet total:** N adopter server processes sharing one Postgres instance
+  can hold up to N × 10 connections. Keep the total comfortably under the
+  database's `max_connections` (Postgres default: 100), leaving headroom for
+  operator sessions, the verifier CLI, and monitoring.
+- **Persona-provisioning concurrency:** `persona_create` and
+  `persona_revoke` each hold a dedicated pooled connection for their whole
+  transaction. If persona transactions ever occupy the entire pool
+  concurrently, other callers' audit writes queue behind them; past the
+  connection timeout they fail into audit logging's never-throw error
+  handling — a dropped audit row. This load is bounded by the
+  `manage_personas` scope (only provisioning callers can generate it). If
+  your deployment runs high-concurrency provisioning: raise the pool `max`
+  with corresponding `max_connections` headroom, serialize provisioning in
+  the caller, or reserve a connection allotment for audit emission.
+
+The pool also sets `idle_in_transaction_session_timeout` (60 s) on its
+connections, so a stranded transaction cannot hold row locks — including the
+migration-016 chain lock — indefinitely.
+
+### Shutdown drain
+
+On SIGTERM or SIGINT the server stops accepting new work, drains in-flight
+governed calls and their audit writes, closes the pool, and then exits. The
+drain is bounded by `GIF_SHUTDOWN_TIMEOUT_SECONDS` (default 8). Configure
+your orchestrator's stop grace period **above** this value (Docker
+`stop_grace_period`, Kubernetes `terminationGracePeriodSeconds`) so the
+platform does not SIGKILL the process mid-drain. A second signal during the
+drain forces immediate exit with a nonzero code.
+
+### Session mapping for long-lived integrations
+
+Do **not** map one GIF session to one long-lived external connection (for
+example, a provider account whose OAuth grant lives for months). GIF
+sessions are stateless database handles: minting and closing them is cheap,
+idle-open sessions cost nothing, and `GIF_SESSION_TTL_SECONDS` (default
+86400) hard-caps their lifetime at 24 hours regardless.
+
+Mint a session per task or work burst, and close it when the burst ends. The
+wrong mapping — one giant week-long session per user or account — buys three
+costs simultaneously: combination-policy checks (if your tools invoke them)
+aggregate over all of a session's audit rows, so per-call cost grows with
+session length; audit records group less usefully for review; and the
+session handle, itself a bearer token, stays valid for a wider window.
+
+---
+
+## 7. Pre-deployment checklist
 
 - [ ] TLS termination configured at reverse proxy
 - [ ] `/health` restricted to internal network
 - [ ] Rate limiting configured at proxy layer
 - [ ] Audit partitions verified through at least 3 months from today
 - [ ] Monthly partition task scheduled (cron or orchestration)
+- [ ] Migration 016 applied before any concurrent writers (in-place upgrades)
+- [ ] Postgres `max_connections` accommodates pool max × number of GIF
+      server processes, with headroom
+- [ ] Orchestrator stop grace period exceeds `GIF_SHUTDOWN_TIMEOUT_SECONDS`
 - [ ] `persona_id` bearer tokens handled as secrets in your application
 - [ ] HMAC identity token issuance integrated with your IdP or user session
