@@ -48,6 +48,7 @@
 // =============================================================================
 
 import pool from '../db.js';
+import type { PoolClient } from 'pg';
 import { Persona, ScopeDefinition, logScopeViolation, verifyIdentityBinding, EnforcementLayer } from '../persona.js';
 import type { ToolHandler, ToolResult } from './types.js';
 import { nonEmptyStringArgError, jsonObjectArgError } from './arg-guards.js';
@@ -341,12 +342,38 @@ export async function executePersonaCreate(
 
   // ---------------------------------------------------------------------------
   // Insert persona (and delegation_chain record if delegated) — atomic
+  //
+  // Dedicated client, not pool.query(): each pool.query() checks out an
+  // arbitrary connection, so BEGIN / INSERT / COMMIT issued through the pool
+  // can land on different connections under concurrency — the "transaction"
+  // silently stops being one, and the connection that ran BEGIN returns to
+  // the pool with an open transaction. Any later query that checks out that
+  // connection joins the stale transaction; if that query is an audit INSERT
+  // it acquires the chain-serialization lock (migration 016) and never
+  // releases it — blocking every audit write on the database. All statements
+  // therefore run on one explicitly held client, released in finally.
   // ---------------------------------------------------------------------------
 
+  // Acquire inside its own try so connect-time failure (pool exhausted past
+  // connectionTimeoutMillis, DB unreachable) returns the tool's normal error
+  // shape instead of propagating a raw throw.
+  let client: PoolClient;
   try {
-    await pool.query('BEGIN');
+    client = await pool.connect();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`[persona_create] Failed to acquire a connection:`, message);
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ error: 'Persona creation failed due to an internal error' }) }],
+      isError: true,
+    };
+  }
 
-    const result = await pool.query<{ persona_id: string }>(
+  let destroyClient = false;
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query<{ persona_id: string }>(
       `INSERT INTO personas (
          issuing_entity,
          purpose,
@@ -373,7 +400,7 @@ export async function executePersonaCreate(
     const newPersonaId = result.rows[0].persona_id;
 
     if (args.parent_persona_id) {
-      await pool.query(
+      await client.query(
         `INSERT INTO delegation_chain (
            parent_persona_id,
            child_persona_id,
@@ -391,7 +418,7 @@ export async function executePersonaCreate(
       );
     }
 
-    await pool.query('COMMIT');
+    await client.query('COMMIT');
 
     return {
       content: [{ type: 'text', text: JSON.stringify({
@@ -408,13 +435,21 @@ export async function executePersonaCreate(
     };
 
   } catch (err) {
-    await pool.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ROLLBACK only fails when the connection itself is broken — destroy
+      // it rather than return a client with an open transaction to the pool.
+      destroyClient = true;
+    }
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error(`[persona_create] Transaction failed:`, message);
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'Persona creation failed due to an internal error' }) }],
       isError: true,
     };
+  } finally {
+    client.release(destroyClient);
   }
 }
 

@@ -39,9 +39,28 @@ const pool = new Pool({
   // Connection pool sizing.
   // Conservative defaults for current single-server deployment.
   // Revisit if concurrent tool call volume increases significantly.
+  //
+  // Known capacity limit: persona_create/persona_revoke hold a dedicated
+  // connection for their whole transaction, competing with audit emission on
+  // this same shared pool. If >= max persona transactions run concurrently,
+  // other callers' audit writes queue and — past connectionTimeoutMillis —
+  // fail into logAuditEvent's never-throw catch (a dropped audit row).
+  // Persona tools require manage_personas scope, which bounds who can drive
+  // that load. Sizing guidance and structural options (reserved audit
+  // allotment, per-persona serialization) are ops-runbook material.
   max:            10,   // Maximum concurrent connections
   idleTimeoutMillis: 30000,   // Close idle connections after 30s
   connectionTimeoutMillis: 5000,  // Fail fast if Postgres is unreachable
+
+  // Kill any connection left idle inside an open transaction after 60s —
+  // defense in depth behind the dedicated-client transaction pattern in
+  // persona_create/persona_revoke. A stranded BEGIN holds its row locks
+  // indefinitely, and an audit INSERT that later joins the stale transaction
+  // holds the chain-serialization lock (migration 016), blocking every audit
+  // write on the database. gif transactions are tight query sequences;
+  // legitimate in-transaction idle time is milliseconds, so 60s is enormous
+  // headroom against false kills.
+  options: '-c idle_in_transaction_session_timeout=60000',
 });
 
 // Log pool errors — these are background connection errors, not query errors.

@@ -107,19 +107,42 @@ export async function executePersonaRevoke(args, persona, sessionId) {
         };
     }
     // Execute revocation in a transaction — status update, session close,
-    // and revocation_log are atomic
+    // and revocation_log are atomic.
+    //
+    // Dedicated client, not pool.query(): transaction statements issued
+    // through the pool can land on different connections under concurrency,
+    // stranding an open transaction on a pooled connection (see the matching
+    // comment in persona_create.ts for the full failure chain — it ends with
+    // the migration-016 chain lock held indefinitely). All statements run on
+    // one explicitly held client, released in finally.
+    // Acquire inside its own try so connect-time failure (pool exhausted past
+    // connectionTimeoutMillis, DB unreachable) returns the tool's normal error
+    // shape instead of propagating a raw throw.
+    let client;
     try {
-        await pool.query('BEGIN');
-        await pool.query(`UPDATE personas
+        client = await pool.connect();
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`[persona_revoke] Failed to acquire a connection:`, message);
+        return {
+            content: [{ type: 'text', text: JSON.stringify({ error: 'Revocation failed due to an internal error' }) }],
+            isError: true,
+        };
+    }
+    let destroyClient = false;
+    try {
+        await client.query('BEGIN');
+        await client.query(`UPDATE personas
        SET status = 'revoked', updated_at = now()
        WHERE persona_id = $1`, [args.target_persona_id]);
         // Close all open sessions for the revoked persona
-        const sessionResult = await pool.query(`UPDATE sessions
+        const sessionResult = await client.query(`UPDATE sessions
        SET ended_at = now()
        WHERE persona_id = $1 AND ended_at IS NULL
        RETURNING session_id`, [args.target_persona_id]);
         const sessionsTerminated = sessionResult.rowCount ?? 0;
-        await pool.query(`INSERT INTO revocation_log (
+        await client.query(`INSERT INTO revocation_log (
          persona_id,
          previous_status,
          new_status,
@@ -133,7 +156,7 @@ export async function executePersonaRevoke(args, persona, sessionId) {
             args.revoked_by,
             sessionsTerminated,
         ]);
-        await pool.query('COMMIT');
+        await client.query('COMMIT');
         return {
             content: [{ type: 'text', text: JSON.stringify({
                         target_persona_id: args.target_persona_id,
@@ -147,13 +170,23 @@ export async function executePersonaRevoke(args, persona, sessionId) {
         };
     }
     catch (err) {
-        await pool.query('ROLLBACK');
+        try {
+            await client.query('ROLLBACK');
+        }
+        catch {
+            // ROLLBACK only fails when the connection itself is broken — destroy
+            // it rather than return a client with an open transaction to the pool.
+            destroyClient = true;
+        }
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error(`[persona_revoke] Transaction failed:`, message);
         return {
             content: [{ type: 'text', text: JSON.stringify({ error: 'Revocation failed due to an internal error' }) }],
             isError: true,
         };
+    }
+    finally {
+        client.release(destroyClient);
     }
 }
 // ----------------------------------------------------------------------------
