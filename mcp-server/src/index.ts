@@ -110,7 +110,7 @@ let drainResolve: (() => void) | null = null;
 function createServer() {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- low-level API required for registry-driven dispatch
   const server = new Server(
-    { name: 'gif-mcp-server', version: '0.2.0' },
+    { name: 'gif-mcp-server', version: '0.2.2' },
     {
       capabilities: { tools: {} },
       // 2026-07-28 cache envelope: explicit do-not-cache hints. tools/list is
