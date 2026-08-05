@@ -145,6 +145,12 @@ for production infrastructure — the automatic creation will not run.
 connect to the GIF database as `gif_admin` and run:
 
 ```sql
+-- Partition bounds must be exactly UTC month-aligned (migration 016
+-- invariant — the hash-chain trigger derives chain scope, lock keys, and
+-- stamp bounds under TimeZone 'UTC'). Pin the session before creating
+-- partitions so the date literals resolve as UTC instants:
+SET TIME ZONE 'UTC';
+
 DO $$
 DECLARE
     m      date;
