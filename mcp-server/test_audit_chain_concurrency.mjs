@@ -49,6 +49,13 @@
 // Fixture note: Test 7 depends on the audit_events_2026_07 partition created
 // by migration 009; it will need a new target month if that partition is ever
 // retired (shared cliff with the rest of the suite's partition horizon).
+//
+// Isolation note: tests 1/4/5a/6 assert exact chain adjacency
+// (X.previous_hash === Y.event_hash) for current-month rows written across
+// separate statements — any unrelated writer on the same database landing a
+// row in between produces a one-off red with an intact chain. Run against a
+// database with no other live MCP traffic (CI does; a shared dev instance
+// may not).
 // =============================================================================
 
 import pg from 'pg';
@@ -292,10 +299,12 @@ try {
       `J2 at ${j2.us}us, J1 at ${j1.us}us`);
   }
 
+  let alertTimer;
   const alertPayload = await Promise.race([
     alertReceived,
-    sleep(10_000).then(() => null),
+    new Promise((r) => { alertTimer = setTimeout(() => r(null), 10_000); }),
   ]);
+  clearTimeout(alertTimer);
   await clientA.query('UNLISTEN audit_chain_order_alert');
 
   if (alertPayload && alertPayload.includes('Chain-order floor moved event')) {

@@ -127,8 +127,10 @@
 -- alignment for every existing partition and REFUSES the migration
 -- otherwise (fail loudly at apply time, not silently at insert time).
 -- Partitions created after this migration must also be UTC month-aligned:
--- create them with explicit '+00' bounds or under a UTC session, as the ops
--- runbook does.
+-- create them with explicit '+00' bounds or under a UTC session. Both
+-- partition-provisioning procedures pin this
+-- (docs/runbooks/adopter/production-deployment.md sets TIME ZONE 'UTC';
+-- docs/ops-runbook-audit-retention.md uses explicit '+00' bounds).
 --
 -- What does NOT change:
 --   The canonical preimage build and canon_version stamp are byte-identical to
@@ -166,6 +168,13 @@ BEGIN;
 
 -- Drain in-flight audit writers and hold new ones until this transaction
 -- commits — see "Cutover" in the header. Cascades to all partitions.
+-- lock_timeout bounds the wait: on a busy cluster the ACCESS EXCLUSIVE
+-- request would otherwise queue behind any long-running reader while
+-- blocking all audit writes queued behind it. On timeout the whole
+-- migration aborts cleanly (single transaction, no partial state) and can
+-- be retried in a quieter window. In-flight audit writes are ms-scale, so
+-- 60s only trips when something long-running holds the table.
+SET LOCAL lock_timeout = '60s';
 LOCK TABLE gif.audit_events IN ACCESS EXCLUSIVE MODE;
 
 -- ---------------------------------------------------------------------------

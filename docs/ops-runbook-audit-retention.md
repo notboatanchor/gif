@@ -249,10 +249,13 @@ arriving for a month with no partition will fail insertion.
 **Provision next partition on the first working day of the preceding month.**
 
 ```sql
--- Template — substitute next month's values
+-- Template — substitute next month's values.
+-- Bounds carry an explicit +00 offset: partition bounds must be exactly
+-- UTC month-aligned (migration 016 invariant — the hash-chain trigger
+-- derives chain scope, lock keys, and stamp bounds under TimeZone 'UTC').
 CREATE TABLE audit_events_YYYY_MM
     PARTITION OF audit_events
-    FOR VALUES FROM ('YYYY-MM-01') TO ('YYYY-<MM+1>-01');
+    FOR VALUES FROM ('YYYY-MM-01 00:00:00+00') TO ('YYYY-<MM+1>-01 00:00:00+00');
 
 GRANT SELECT, INSERT ON audit_events_YYYY_MM TO gif_app;
 REVOKE UPDATE ON audit_events_YYYY_MM FROM gif_app;
