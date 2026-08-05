@@ -92,9 +92,9 @@ implementation. The runnable known-answer vectors ship in this repository under
 
 ```bash
 # HTTPS (no SSH key required):
-git clone --branch v0.2.1 https://github.com/notboatanchor/gif.git
+git clone --branch v0.2.2 https://github.com/notboatanchor/gif.git
 # Or SSH:
-# git clone --branch v0.2.1 git@github.com:notboatanchor/gif.git
+# git clone --branch v0.2.2 git@github.com:notboatanchor/gif.git
 
 cd gif
 cp .env.example .env   # fill in passwords and secrets
@@ -130,7 +130,7 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 
 ## Current State
 
-`v0.2.1` is the recommended pin. It runs on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0` final) and carries the v0.2 governance-session semantics: explicit `gif_session_id` handles minted by `session_start` (the MCP 2026-07-28 spec's server-minted state-handle model, SEP-2567), caller-driven close, and wall-clock TTL. Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies, SQL-identifier safety) plus the six GIF-022 conformance scenarios run on every commit via CI. TypeScript strict mode throughout.
+`v0.2.2` is the recommended pin. It runs on the MCP SDK 2.0 substrate (`@modelcontextprotocol/server` + `/node` at `2.0.0` final) and carries the v0.2 governance-session semantics: explicit `gif_session_id` handles minted by `session_start` (the MCP 2026-07-28 spec's server-minted state-handle model, SEP-2567), caller-driven close, and wall-clock TTL. Core enforcement is complete and validated end-to-end against a real PostgreSQL 16 instance — no functional mocks. The integration suite (persona lifecycle, MCP enforcement, audit trail, hash chain, identity binding, delegation, retention, combination policies, SQL-identifier safety) plus the six GIF-022 conformance scenarios run on every commit via CI. TypeScript strict mode throughout.
 
 The RC line tracked MCP SDK 2.0 prereleases through the spec RC window. The MCP SDK finalized at `2.0.0` on 2026-07-27 and the `2026-07-28` MCP specification published on 2026-07-28; `v0.2.0` pins the final SDK and hosts via its `createMcpHandler` layer, serving the `2026-07-28` protocol revision (`server/discover`, cache envelopes) to modern clients and 2025-era clients via the SDK's built-in stateless fallback. `v0.2.0-rc.4` (SDK `2.0.0-beta.1`) remains available for adopters mid-upgrade.
 
