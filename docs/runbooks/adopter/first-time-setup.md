@@ -109,7 +109,7 @@ PGPASSWORD=<GIF_ADMIN_PASSWORD> psql \
   -c "SELECT migration_name, applied_at FROM gif.schema_migrations ORDER BY applied_at;"
 ```
 
-You should see 15 rows — `001_gif_core.sql` through `015_audit_canonical_json_v2.sql`.
+You should see 16 rows — `001_gif_core.sql` through `016_audit_chain_concurrency.sql`.
 
 Verify the MCP server is accepting connections:
 
@@ -489,7 +489,8 @@ for f in gif/schema/001_gif_core.sql \
           gif/schema/012_schema_migrations.sql \
           gif/schema/013_session_v2_semantics.sql \
           gif/schema/014_audit_canonical_json.sql \
-          gif/schema/015_audit_canonical_json_v2.sql; do
+          gif/schema/015_audit_canonical_json_v2.sql \
+          gif/schema/016_audit_chain_concurrency.sql; do
   PGPASSWORD=<gif_admin_password> psql \
     -h <host> -p <port> -U gif_admin -d <your_database> \
     -v ON_ERROR_STOP=1 -f "$f"
@@ -498,7 +499,7 @@ done
 
 This list must match the migration sequence in `scripts/install.sh`
 (`GIF_MIGRATIONS`) and `ops/docker/init-db.sh` — if you are on a newer tag,
-check those scripts for migrations added after `015`.
+check those scripts for migrations added after `016`.
 
 **Verify**
 
@@ -508,7 +509,7 @@ FROM gif.schema_migrations
 ORDER BY applied_at;
 ```
 
-You should see 15 rows. The `gif` schema now coexists with your existing schemas.
+You should see 16 rows. The `gif` schema now coexists with your existing schemas.
 Your existing schemas and their owners are unaffected.
 
 **Configure your MCP server**

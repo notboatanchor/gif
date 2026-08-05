@@ -22,24 +22,33 @@
 // This is the fail-before/pass-after pair for migration 016. Against a
 // pre-016 trigger, writer B does not block while writer A's row is
 // uncommitted, both link the same parent, and the chain forks — tests 2–4
-// fail. Against 016, B blocks on the month-scoped advisory lock and links to
-// A's hash when it commits.
+// fail. Against 016, B blocks on the month's gif.audit_chain_locks row
+// (SELECT ... FOR UPDATE inside the trigger) and links to A's hash when it
+// commits.
 //
 // Validates:
 //   1. Writer A links to the pre-test chain tail
-//   2. Writer B blocks on the chain advisory lock (classid 1195984449 'GIFA')
-//      while A's row is uncommitted — observed via pg_locks, not a timer
+//   2. Writer B blocks on the chain lock while A's row is uncommitted —
+//      observed as a heavyweight-lock wait in pg_stat_activity, not a timer
 //   3. B stays blocked until A commits (no fork window)
 //   4. After A commits, B links to A's event_hash (not A's parent) and sorts
 //      strictly after A — linkage order == (occurred_at, event_id) order
-//   5. Chain-order floor: an explicit occurred_at at-or-before the chain tail
-//      is bumped to sort strictly after the tail it links to
+//   5a. An explicit stamp in the CURRENT month is re-stamped with the server
+//       clock (016 stamp posture — the trail owns occurred_at)
+//   5b/5c. Chain-order floor, exercised where the re-stamp is skipped (an
+//       other-month partition): a stamp at-or-before that month's tail is
+//       bumped to sort strictly after the tail it links to, and a bump
+//       larger than 1s raises a pg_notify on 'audit_chain_order_alert'
 //   6. DEFAULT-stamped rows are re-stamped under the lock and stay monotone
 //   7. Month confinement: an explicit stamp in another month's partition is
 //      NOT re-stamped out of its month (no partition-constraint violation)
 //
 // The full-chain verifier pass over these rows happens downstream in the same
 // suite run (test_chain_verifier.mjs / test_verify_integrity_e2e.mjs).
+//
+// Fixture note: Test 7 depends on the audit_events_2026_07 partition created
+// by migration 009; it will need a new target month if that partition is ever
+// retired (shared cliff with the rest of the suite's partition horizon).
 // =============================================================================
 
 import pg from 'pg';
@@ -53,10 +62,6 @@ const dbConfig = {
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE || 'gif',
 };
-
-// Advisory-lock namespace for gif's audit chain (migration 016): 0x47494641,
-// ASCII 'GIFA'. pg_locks reports int4 keys as unsigned in classid.
-const CHAIN_LOCK_CLASSID = 1195984449;
 
 let passed = 0;
 let failed = 0;
@@ -85,7 +90,7 @@ const INSERT_EVENT = `
   RETURNING event_id, event_hash, previous_hash, occurred_at,
             (extract(epoch FROM occurred_at) * 1000000)::bigint AS us`;
 
-const pool = new Pool(dbConfig);          // observer: pg_locks, tails, fixtures
+const pool = new Pool(dbConfig);          // observer: waits, tails, fixtures
 const clientA = new Client(dbConfig);     // writer A — holds the open transaction
 const clientB = new Client(dbConfig);     // writer B — must block on A's lock
 
@@ -94,6 +99,7 @@ console.log('\nMigration 016 — Audit Chain Concurrency Tests\n');
 try {
   await clientA.connect();
   await clientB.connect();
+  const bPid = (await clientB.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
 
   // Hang guard: if serialization is broken in a way that wedges B forever,
   // fail the test instead of wedging the suite. Generous — normal blocking
@@ -154,28 +160,30 @@ try {
   // rejection; the real await below surfaces any error.
   bPromise.catch(() => {});
 
-  // Deterministic block detection: poll pg_locks for an ungranted waiter on
-  // the chain classid (no blind timing assumptions).
+  // Deterministic block detection: poll pg_stat_activity until B's backend
+  // reports a heavyweight-lock wait (the FOR UPDATE on the chain-lock row
+  // waits on A's transaction). Same-role backends expose wait_event_type to
+  // us; no blind timing assumptions. Generous ceiling (~10s) for slow CI.
   let waiterSeen = false;
-  for (let i = 0; i < 100; i++) {
-    const locks = await pool.query(
-      `SELECT 1 FROM pg_locks
-       WHERE locktype = 'advisory' AND classid = $1 AND NOT granted`,
-      [CHAIN_LOCK_CLASSID]
+  for (let i = 0; i < 200; i++) {
+    const waits = await pool.query(
+      `SELECT 1 FROM pg_stat_activity
+       WHERE pid = $1 AND wait_event_type = 'Lock'`,
+      [bPid]
     );
-    if (locks.rows.length > 0) { waiterSeen = true; break; }
+    if (waits.rows.length > 0) { waiterSeen = true; break; }
     if (bSettled) break;  // B finished without ever waiting — pre-016 behavior
     await sleep(50);
   }
 
   if (waiterSeen && !bSettled) {
-    pass('Writer B blocks on the chain advisory lock while A is uncommitted');
+    pass('Writer B blocks on the chain lock while A is uncommitted');
   } else if (bSettled) {
-    fail('Writer B blocks on the chain advisory lock while A is uncommitted',
+    fail('Writer B blocks on the chain lock while A is uncommitted',
       'B completed while A was uncommitted — unlocked prev-hash read (pre-016 fork behavior)');
   } else {
-    fail('Writer B blocks on the chain advisory lock while A is uncommitted',
-      'No advisory-lock waiter observed in pg_locks within 5s');
+    fail('Writer B blocks on the chain lock while A is uncommitted',
+      'No lock wait observed in pg_stat_activity within 10s');
   }
 
   // B must still be blocked right up to the commit.
@@ -205,29 +213,99 @@ try {
   }
 
   // -------------------------------------------------------------------------
-  // Test 5: chain-order floor — explicit stamp at-or-before the tail is
-  // bumped to sort strictly after the tail it links to
+  // Test 5a: an explicit stamp in the CURRENT month is re-stamped with the
+  // server clock (the 016 stamp posture) — the floor is not what fires here
   // -------------------------------------------------------------------------
 
   const cResult = await pool.query(
     `INSERT INTO gif.audit_events
        (persona_id, session_id, event_type, tool_name, outcome, flagged,
         purpose_declared, occurred_at)
-     VALUES ($1, $2, 'tool_call', 'test_floor_backdated', 'allowed', false,
+     VALUES ($1, $2, 'tool_call', 'test_current_month_explicit', 'allowed', false,
              'chain concurrency test',
              GREATEST(date_trunc('month', now()), now() - INTERVAL '1 minute'))
-     RETURNING event_hash, previous_hash,
+     RETURNING event_hash, previous_hash, occurred_at,
                (extract(epoch FROM occurred_at) * 1000000)::bigint AS us`,
     [personaId, sessionId]
   );
   const c = cResult.rows[0];
+  const cSkewMs = Math.abs(Date.now() - c.occurred_at.getTime());
 
-  if (c.previous_hash === b.event_hash && BigInt(c.us) > BigInt(b.us)) {
+  if (c.previous_hash === b.event_hash && BigInt(c.us) > BigInt(b.us) && cSkewMs < 60_000) {
+    pass('Explicit current-month stamp is re-stamped to the server clock, links after tail');
+  } else {
+    fail('Explicit current-month stamp is re-stamped to the server clock, links after tail',
+      `C.previous_hash ${c.previous_hash} vs B.event_hash ${b.event_hash}; ` +
+      `C at ${c.us}us, B at ${b.us}us; skew from now ${cSkewMs}ms`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 5b/5c: chain-order floor — in an OTHER-month partition (where the
+  // re-stamp is skipped), a stamp at-or-before that month's tail is bumped
+  // to sort strictly after the tail it links to, and a >1s bump raises the
+  // audit_chain_order_alert notification
+  // -------------------------------------------------------------------------
+
+  // Establish a tail in the 2026-07 partition (migration 009). Kept verbatim
+  // on a fresh volume (empty partition); floored by microseconds against
+  // residue from prior runs on a persisted volume — either way it becomes
+  // the July tail at or after 07-20.
+  const j1Result = await pool.query(
+    `INSERT INTO gif.audit_events
+       (persona_id, session_id, event_type, tool_name, outcome, flagged,
+        purpose_declared, occurred_at)
+     VALUES ($1, $2, 'tool_call', 'test_floor_tail', 'allowed', false,
+             'chain concurrency test', '2026-07-20T12:00:00Z')
+     RETURNING event_hash,
+               (extract(epoch FROM occurred_at) * 1000000)::bigint AS us`,
+    [personaId, sessionId]
+  );
+  const j1 = j1Result.rows[0];
+
+  // clientA is idle (transaction committed) — use it as the alert listener.
+  const alertReceived = new Promise((resolve) => {
+    clientA.on('notification', (msg) => {
+      if (msg.channel === 'audit_chain_order_alert') resolve(msg.payload);
+    });
+  });
+  await clientA.query('LISTEN audit_chain_order_alert');
+
+  // Five days before the July tail: the floor must bump it past j1, and the
+  // ~5-day bump is far over the 1s alert threshold.
+  const j2Result = await pool.query(
+    `INSERT INTO gif.audit_events
+       (persona_id, session_id, event_type, tool_name, outcome, flagged,
+        purpose_declared, occurred_at)
+     VALUES ($1, $2, 'tool_call', 'test_floor_backdated', 'allowed', false,
+             'chain concurrency test', '2026-07-15T12:00:00Z')
+     RETURNING event_hash, previous_hash,
+               (extract(epoch FROM occurred_at) * 1000000)::bigint AS us`,
+    [personaId, sessionId]
+  );
+  const j2 = j2Result.rows[0];
+
+  if (j2.previous_hash === j1.event_hash && BigInt(j2.us) > BigInt(j1.us)) {
     pass('Backdated explicit stamp is floored strictly after the chain tail');
   } else {
     fail('Backdated explicit stamp is floored strictly after the chain tail',
-      `C.previous_hash ${c.previous_hash} vs B.event_hash ${b.event_hash}; ` +
-      `C at ${c.us}us, B at ${b.us}us`);
+      `J2.previous_hash ${j2.previous_hash} vs J1.event_hash ${j1.event_hash}; ` +
+      `J2 at ${j2.us}us, J1 at ${j1.us}us`);
+  }
+
+  const alertPayload = await Promise.race([
+    alertReceived,
+    sleep(10_000).then(() => null),
+  ]);
+  await clientA.query('UNLISTEN audit_chain_order_alert');
+
+  if (alertPayload && alertPayload.includes('Chain-order floor moved event')) {
+    pass('Floor bump > 1s raises audit_chain_order_alert notification');
+  } else if (alertPayload) {
+    fail('Floor bump > 1s raises audit_chain_order_alert notification',
+      `Unexpected payload: ${alertPayload}`);
+  } else {
+    fail('Floor bump > 1s raises audit_chain_order_alert notification',
+      'No notification received within 10s');
   }
 
   // -------------------------------------------------------------------------
@@ -287,7 +365,7 @@ try {
 } finally {
   await clientA.end().catch(() => {});
   await clientB.end().catch(() => {});
-  await pool.end();
+  await pool.end().catch(() => {});
 }
 
 console.log(`\n${passed + failed} tests — ${passed} passed, ${failed} failed\n`);

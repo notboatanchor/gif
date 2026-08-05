@@ -30,33 +30,42 @@
 --   transaction that starts first but commits second can link forward while
 --   sorting earlier — an ordering inversion with the same verification effect.
 --
---   This migration serializes chain writes per month partition with a
---   transaction-scoped advisory lock taken before the prev-hash read, and
---   re-stamps occurred_at under the lock so chain order and sort order agree.
+--   This migration serializes chain writes per month partition by locking a
+--   row in a gif-owned lock table before the prev-hash read, and re-stamps
+--   occurred_at under the lock so chain order and sort order agree.
 --
 -- What changes (three additions to the trigger function; everything else is
 -- carried verbatim from migration 015):
 --
---   1. SERIALIZE — pg_advisory_xact_lock(classid, objid) before the prev-hash
---      lookup. classid = 1195984449 (0x47494641, ASCII 'GIFA') namespaces
---      gif's chain locks away from adopter application advisory locks; objid =
---      linear month serial (year*12 + month-1) of the row's partition month,
---      so the lock scope is exactly the chain scope (one chain per month
---      partition). The lock releases at transaction end; no unlock path.
+--   1. SERIALIZE — the trigger takes SELECT ... FOR UPDATE on this month's
+--      row in gif.audit_chain_locks (created below; one row per month,
+--      self-created on first use) before the prev-hash lookup. The row lock
+--      releases at transaction end; lock scope is exactly the chain scope
+--      (one chain per month partition).
+--
+--      Why a lock table and not pg_advisory_xact_lock: advisory-lock
+--      functions are executable by PUBLIC and their keyspace is open — any
+--      role with CONNECT on this database, holding no grant on any gif
+--      object, could acquire the (documented) chain key and wedge all audit
+--      writes indefinitely. A gif-owned lock row is privilege-scoped by the
+--      grant model: this table carries NO grants, so the only code path that
+--      can ever contend for the lock is this SECURITY DEFINER trigger.
+--      Structural, not policy — consistent with the append-only enforcement.
 --
 --      Blocking posture: BLOCK FOREVER, deliberately. No lock_timeout — a
 --      timeout expiry would throw mid-trigger, abort the INSERT, and (because
 --      audit logging never throws at the emission layer) silently drop the
 --      audit row: an action without a record, the exact failure class this
 --      trail exists to prevent. Lock holds are single-INSERT, millisecond
---      scale; a wedged holder (an operator transaction left open mid-INSERT)
---      is pathological and operationally visible (all audit writes stall).
+--      scale; a wedged holder (a transaction left open mid-INSERT) is
+--      pathological and operationally visible (all audit writes stall; the
+--      waiters appear in pg_stat_activity with wait_event_type = 'Lock').
 --
---      The lock call sits OUTSIDE every exception handler on purpose: if
---      acquisition itself fails (query cancel, deadlock), the INSERT aborts
---      rather than proceeding unlocked — proceeding unlocked would silently
---      reopen the fork window. The emission layer treats that like any other
---      failed INSERT (caught, logged, never masks the tool response).
+--      The lock acquisition sits OUTSIDE every exception handler on purpose:
+--      if it fails (query cancel, deadlock), the INSERT aborts rather than
+--      proceeding unlocked — proceeding unlocked would silently reopen the
+--      fork window. The emission layer treats that like any other failed
+--      INSERT (caught, logged, never masks the tool response).
 --
 --   2. RE-STAMP — occurred_at := clock_timestamp() after lock acquisition,
 --      ONLY while the clock is still inside the row's partition month.
@@ -64,11 +73,18 @@
 --      serialized, which closes the transaction-start inversion window. The
 --      month confinement is load-bearing: partition routing has already
 --      happened when a BEFORE ROW trigger runs, and a trigger that moves the
---      partition key outside the routed partition's bounds raises a partition
---      constraint violation — which would abort the INSERT and drop the row.
---      Confinement covers both a lock wait that spans a month rollover and an
---      operator INSERT explicitly stamped into another month's partition
+--      partition key into another partition's range makes PostgreSQL abort
+--      the INSERT (error 0A000, "moving row to another partition during a
+--      BEFORE FOR EACH ROW trigger is not supported") — which would drop the
+--      row. Confinement covers both a lock wait that spans a month rollover
+--      and an INSERT explicitly stamped into another month's partition
 --      (e.g. test fixtures); both keep their original stamp.
+--
+--      Note the resulting asymmetry, which is deliberate: an explicitly
+--      supplied occurred_at in the CURRENT month is overwritten with the
+--      server clock (the trail's posture since migration 002 — "timestamps
+--      from server clock — not settable by application"); an explicit stamp
+--      in another month's partition is preserved, subject to the floor below.
 --
 --   3. CHAIN-ORDER FLOOR — after the prev-hash read, if the new row's stamp
 --      does not sort strictly after the tail it links to, it is bumped to
@@ -78,16 +94,41 @@
 --      invariant chain verification walks — for every row written through the
 --      serialized path, including the month-rollover sliver above, explicit
 --      backdated stamps landing in a partition that already has later rows,
---      and a system clock stepped backwards between two writes. The audit
---      trail's posture is that occurred_at is the server's field ("timestamps
---      from server clock — not settable by application", migration 002); a
---      chained row is stamped no earlier than its predecessor.
+--      and a system clock stepped backwards between two writes.
 --
---      Accepted edge: if the tail already sits at the month's last microsecond
---      (a concurrent pile-up inside the final microsecond of a month), the cap
---      makes the stamps equal and the verifier's event_id ASC tiebreak may not
---      match write order. Microsecond-bounded, once per month at most, and
---      ordering-only; accepted.
+--      Accepted consequences, explicitly:
+--      * If the tail already sits at the month's last microsecond (a
+--        concurrent pile-up inside the final microsecond of a month), the cap
+--        makes the stamps equal and the verifier's event_id ASC tiebreak may
+--        not match write order. Microsecond-bounded, ordering-only; accepted.
+--      * The floor makes rows AFTER an out-of-order tail self-consistent by
+--        adjusting their stamps forward. A future-forged tail (which requires
+--        direct SQL with INSERT privilege — the application path never sends
+--        occurred_at) would therefore silently drag subsequent stamps forward
+--        instead of leaving a visible inversion. To keep that visible, any
+--        floor bump larger than 1 second emits a pg_notify on channel
+--        'audit_chain_order_alert' (best-effort — the emission can never
+--        abort the write). Benign concurrency bumps are microsecond-scale
+--        and stay silent.
+--
+-- Cutover: this migration takes LOCK TABLE gif.audit_events IN ACCESS
+-- EXCLUSIVE MODE first. CREATE OR REPLACE FUNCTION does not wait for
+-- in-flight calls of the old function body, so without the barrier an
+-- old-body writer (lock-free) could overlap a new-body writer and fork the
+-- chain during the apply itself. The table lock drains in-flight writers,
+-- holds new arrivals until commit, and makes the cutover atomic.
+--
+-- Timezone invariant: all month derivations in the trigger run under the
+-- function-pinned TimeZone = 'UTC' (SET clause below), so every session
+-- derives identical chain scopes, lock keys, and floor caps regardless of
+-- its own TimeZone setting. This is only safe when the audit_events
+-- partition bounds themselves are UTC month-aligned — bounds are absolute
+-- instants frozen at partition creation. The verify block asserts that
+-- alignment for every existing partition and REFUSES the migration
+-- otherwise (fail loudly at apply time, not silently at insert time).
+-- Partitions created after this migration must also be UTC month-aligned:
+-- create them with explicit '+00' bounds or under a UTC session, as the ops
+-- runbook does.
 --
 -- What does NOT change:
 --   The canonical preimage build and canon_version stamp are byte-identical to
@@ -100,25 +141,78 @@
 --   ownership, and the never-throws HASH_ERROR fallback carry over verbatim.
 --
 -- Operational notes:
---   * Advisory lock keys are cluster-wide, not per-database. Two gif databases
---     in one PostgreSQL cluster contend on the same (classid, month) keys —
---     false sharing that adds latency, never incorrectness. Negligible at
---     single-database deployment scale; noted for multi-database clusters.
 --   * A single transaction inserting audit rows into MULTIPLE months acquires
---     one lock per month in insert order; two such transactions inserting in
---     opposite month order can deadlock (PostgreSQL detects and aborts one).
---     The emission layer writes one row per transaction and cannot hit this;
---     keep any operator multi-month backfill to one month per transaction.
+--     one lock row per month in insert order; two such transactions inserting
+--     in opposite month order can deadlock (PostgreSQL detects and aborts
+--     one — and the aborted transaction's pending audit rows are lost, an
+--     accepted action-without-a-record exception confined to manual
+--     multi-month backfills). The emission layer writes one row per
+--     transaction and cannot hit this; keep any operator multi-month backfill
+--     to one month per transaction.
 --   * The prev-hash lookup's error swallow (SELECT failure → prev_hash NULL,
 --     carried from 006) is unchanged and now runs under the lock. A spurious
---     swallow still genesis-links the row; pre-existing behavior, out of
---     scope here.
+--     swallow genesis-links the row AND skips the chain-order floor (the tail
+--     stamp is unknown); pre-existing behavior, out of scope here.
+--   * gif.audit_chain_locks accumulates one row per month ever written.
+--     Rows are never deleted; rows for retired partitions are harmless.
+--
+-- Rollback: re-run migration 015's "PART 2" (its CREATE OR REPLACE FUNCTION
+-- statement, verbatim) to restore the pre-016 trigger body, then optionally
+-- DROP TABLE gif.audit_chain_locks. Rolling back reopens the concurrency
+-- fork window this migration closes.
 -- =============================================================================
 
 BEGIN;
 
+-- Drain in-flight audit writers and hold new ones until this transaction
+-- commits — see "Cutover" in the header. Cascades to all partitions.
+LOCK TABLE gif.audit_events IN ACCESS EXCLUSIVE MODE;
+
 -- ---------------------------------------------------------------------------
--- PART 1: Replace the hash trigger function with the serialized build.
+-- PART 1: The chain lock table.
+--
+-- One row per month partition; the trigger locks the row FOR UPDATE to
+-- serialize that month's chain writes, creating the row on first use.
+-- Deliberately NO grants to anyone: the SECURITY DEFINER trigger (owned by
+-- gif_admin) is the only code path that touches it. Do not grant.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE gif.audit_chain_locks (
+    month_start TIMESTAMPTZ PRIMARY KEY
+);
+
+ALTER TABLE gif.audit_chain_locks OWNER TO gif_admin;
+REVOKE ALL ON gif.audit_chain_locks FROM PUBLIC;
+-- Migration 005's ALTER DEFAULT PRIVILEGES auto-grants SELECT, INSERT on new
+-- gif tables to gif_app — revoke it here: the lock table must be reachable
+-- only through the SECURITY DEFINER trigger. (The verify block asserts this.)
+REVOKE ALL ON gif.audit_chain_locks FROM gif_app;
+
+COMMENT ON TABLE gif.audit_chain_locks IS
+    'Serialization points for audit hash-chain writes (migration 016). One row '
+    'per month partition; compute_audit_event_hash() takes SELECT FOR UPDATE '
+    'on the month''s row before the prev-hash lookup, creating it on first '
+    'use. INTENTIONALLY carries no grants — only the SECURITY DEFINER trigger '
+    'touches it, so no other role can contend for (or wedge) the chain lock. '
+    'Rows accumulate one per month and are never deleted.';
+
+COMMENT ON COLUMN gif.audit_chain_locks.month_start IS
+    'UTC month start of the audit_events partition this row serializes. '
+    'Derived under the trigger''s pinned TimeZone (UTC).';
+
+-- The audit trail's stamp semantics changed in 016 — record them where an
+-- operator will look first.
+COMMENT ON COLUMN gif.audit_events.occurred_at IS
+    'Server-clock event time and partition key. Since migration 016: rows '
+    'stamped (or explicitly supplied) in the current month are re-stamped '
+    'with clock_timestamp() under the chain lock; an explicit stamp in '
+    'another month''s partition is preserved. Either way the final stamp is '
+    'floored to sort strictly after the chain tail it links to (bumps > 1s '
+    'raise a pg_notify on ''audit_chain_order_alert''). Not settable by the '
+    'application path (migration 002 posture).';
+
+-- ---------------------------------------------------------------------------
+-- PART 2: Replace the hash trigger function with the serialized build.
 --
 -- CREATE OR REPLACE updates the function body in place; the existing
 -- audit_events_hash_chain trigger (migration 006) keeps pointing at it, so no
@@ -131,17 +225,18 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = gif, pg_temp
+SET timezone = 'UTC'
 AS $$
 DECLARE
-    -- Advisory-lock namespace for gif's audit chain: 0x47494641, ASCII 'GIFA'.
-    -- Documented in the migration-016 header; visible in pg_locks.classid.
-    k_lock_classid CONSTANT INT := 1195984449;
+    -- Floor bumps larger than this are alarmed on 'audit_chain_order_alert';
+    -- benign concurrency bumps are microsecond-scale and stay silent.
+    k_floor_alert CONSTANT INTERVAL := INTERVAL '1 second';
 
     prev_hash     CHAR(64);
     prev_occurred TIMESTAMPTZ;  -- tail row's stamp, for the chain-order floor
     v_month_start TIMESTAMPTZ;  -- this row's partition month (chain scope)
     v_now         TIMESTAMPTZ;
-    v_lock_key    INT;
+    v_orig        TIMESTAMPTZ;  -- pre-floor stamp, for the alert delta
     cg            TEXT;   -- caller-governance extension body (keys sorted)
     ext           TEXT;   -- extensions keyed object (one entry: caller-governance)
     preimage      TEXT;   -- top-level canonical JSON (keys sorted)
@@ -151,15 +246,25 @@ BEGIN
     -- migration 015.)
     NEW.canon_version := 'gif-audit/2';
 
-    -- Step 1 (new in 016): serialize this month's chain writes. The lock key
-    -- is derived from the same month expression the prev-hash lookup scopes
-    -- by, so lock scope ≡ chain scope ≡ routed partition. Blocks until any
+    -- Step 1 (new in 016): serialize this month's chain writes by locking the
+    -- month's row in gif.audit_chain_locks, creating it on first use. The
+    -- month is derived under the pinned UTC timezone, so every session
+    -- derives the same lock row and the same chain scope. Blocks until any
     -- concurrent same-month writer commits; released at transaction end.
     -- Deliberately OUTSIDE every exception handler — see migration header.
     v_month_start := date_trunc('month', NEW.occurred_at);
-    v_lock_key    := EXTRACT(YEAR FROM v_month_start)::INT * 12
-                   + EXTRACT(MONTH FROM v_month_start)::INT - 1;
-    PERFORM pg_advisory_xact_lock(k_lock_classid, v_lock_key);
+    LOOP
+        PERFORM 1 FROM gif.audit_chain_locks
+         WHERE month_start = v_month_start
+           FOR UPDATE;
+        EXIT WHEN FOUND;
+        -- First write of this month: create the lock row, then loop to lock
+        -- it. ON CONFLICT covers a concurrent first-writer; if that writer
+        -- aborts, the loop's next INSERT attempt succeeds.
+        INSERT INTO gif.audit_chain_locks (month_start)
+             VALUES (v_month_start)
+        ON CONFLICT (month_start) DO NOTHING;
+    END LOOP;
 
     -- Step 2 (new in 016): re-stamp under the lock so serialized write order
     -- and occurred_at order agree. Confined to the routed partition month —
@@ -190,10 +295,24 @@ BEGIN
     -- earlier than the predecessor it links to, capped at the last
     -- microsecond of the month to stay inside the routed partition.
     IF prev_occurred IS NOT NULL AND NEW.occurred_at <= prev_occurred THEN
+        v_orig := NEW.occurred_at;
         NEW.occurred_at := LEAST(
             prev_occurred + INTERVAL '1 microsecond',
             v_month_start + INTERVAL '1 month' - INTERVAL '1 microsecond'
         );
+        -- A large bump means the chain tail is far ahead of this row's clock
+        -- stamp — surface it (see header). Best-effort: never abort the write.
+        IF NEW.occurred_at - v_orig > k_floor_alert THEN
+            BEGIN
+                PERFORM pg_notify(
+                    'audit_chain_order_alert',
+                    format('Chain-order floor moved event %s forward by %s (from %s to %s)',
+                           NEW.event_id, NEW.occurred_at - v_orig, v_orig, NEW.occurred_at)
+                );
+            EXCEPTION WHEN OTHERS THEN
+                NULL;  -- alerting must never block the audit write
+            END;
+        END IF;
     END IF;
 
     -- Step 4: Build the canonical preimage (gif-audit/2) and hash.
@@ -246,20 +365,22 @@ $$;
 
 -- gif_admin owns the function (table owner per ADR-032). SECURITY DEFINER runs
 -- as gif_admin regardless of the calling user, so it retains full SELECT on all
--- partitions for the prev-hash lookup with no superuser dependency.
+-- partitions for the prev-hash lookup — and the lock-table access — with no
+-- superuser dependency and no grants to any other role.
 ALTER FUNCTION gif.compute_audit_event_hash() OWNER TO gif_admin;
 
 COMMENT ON FUNCTION gif.compute_audit_event_hash() IS
     'BEFORE INSERT trigger function for gif.audit_events. '
-    'Serializes chain writes per month partition via pg_advisory_xact_lock '
-    '(classid 1195984449 ''GIFA'', objid = month serial; migration 016), '
-    're-stamps occurred_at under the lock (confined to the routed partition '
-    'month, floored strictly after the chain tail), then computes event_hash '
-    '= sha256(canonicalize(body)) in the gif-audit/2 extensions-keyed-object '
-    'canonical form (migration 015) and stamps canon_version = ''gif-audit/2''. '
-    'previous_hash links to the newest prior row in the same month partition. '
-    'SECURITY DEFINER owned by gif_admin. Never throws — hash error written as '
-    'HASH_ERROR with pg_notify alert.';
+    'Serializes chain writes per month partition by locking the month''s row '
+    'in gif.audit_chain_locks FOR UPDATE (migration 016; TimeZone pinned to '
+    'UTC), re-stamps occurred_at under the lock (confined to the routed '
+    'partition month, floored strictly after the chain tail; floor bumps > 1s '
+    'notify ''audit_chain_order_alert''), then computes event_hash = '
+    'sha256(canonicalize(body)) in the gif-audit/2 extensions-keyed-object '
+    'canonical form (migration 015) and stamps canon_version = '
+    '''gif-audit/2''. previous_hash links to the newest prior row in the same '
+    'month partition. SECURITY DEFINER owned by gif_admin. Never throws — '
+    'hash error written as HASH_ERROR with pg_notify on ''audit_chain_error''.';
 
 -- ---------------------------------------------------------------------------
 -- Verify
@@ -271,6 +392,9 @@ DECLARE
     default_expr   TEXT;
     trigger_exists BOOLEAN;
     fn_owner       TEXT;
+    r              RECORD;
+    ts_from        TIMESTAMPTZ;
+    ts_to          TIMESTAMPTZ;
 BEGIN
     -- The serialization lock is present in the installed function body.
     SELECT pg_get_functiondef(p.oid) INTO fn_def
@@ -278,9 +402,53 @@ BEGIN
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'gif' AND p.proname = 'compute_audit_event_hash';
 
-    IF fn_def IS NULL OR fn_def NOT LIKE '%pg_advisory_xact_lock%' THEN
-        RAISE EXCEPTION 'compute_audit_event_hash does not acquire the chain advisory lock';
+    IF fn_def IS NULL
+       OR fn_def NOT LIKE '%audit_chain_locks%'
+       OR fn_def NOT LIKE '%FOR UPDATE%' THEN
+        RAISE EXCEPTION 'compute_audit_event_hash does not take the chain lock';
     END IF;
+
+    -- The lock table exists, and no role beyond its owner can touch it — the
+    -- privilege-scoping the serialization design depends on.
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'gif' AND c.relname = 'audit_chain_locks'
+    ) THEN
+        RAISE EXCEPTION 'gif.audit_chain_locks not found';
+    END IF;
+
+    IF has_table_privilege('gif_app', 'gif.audit_chain_locks', 'SELECT, INSERT, UPDATE, DELETE') THEN
+        RAISE EXCEPTION 'gif.audit_chain_locks must carry no grants to gif_app';
+    END IF;
+
+    -- TimeZone invariant: every audit_events partition bound must be exactly
+    -- a UTC month boundary, or the trigger's UTC-pinned month math would not
+    -- match the physical partitions (see header). Fail the migration loudly
+    -- rather than let inserts fail (or drop rows) later.
+    FOR r IN
+        SELECT c.oid::regclass::text AS part,
+               pg_get_expr(c.relpartbound, c.oid) AS bound
+        FROM pg_inherits i
+        JOIN pg_class c ON c.oid = i.inhrelid
+        WHERE i.inhparent = 'gif.audit_events'::regclass
+    LOOP
+        IF r.bound = 'DEFAULT' THEN
+            RAISE EXCEPTION 'audit_events has a DEFAULT partition (%) — unsupported for the month-scoped hash chain', r.part;
+        END IF;
+
+        ts_from := (regexp_match(r.bound, 'FROM \(''([^'']+)''\)'))[1]::timestamptz;
+        ts_to   := (regexp_match(r.bound, 'TO \(''([^'']+)''\)'))[1]::timestamptz;
+
+        IF ts_from IS NULL OR ts_to IS NULL THEN
+            RAISE EXCEPTION 'could not parse partition bounds for %: %', r.part, r.bound;
+        END IF;
+
+        IF ts_from <> (date_trunc('month', ts_from AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+           OR ts_to <> (date_trunc('month', ts_to AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') THEN
+            RAISE EXCEPTION 'partition % bounds (%) are not UTC month-aligned — realign partitions (or create them under a UTC session) before applying migration 016', r.part, r.bound;
+        END IF;
+    END LOOP;
 
     -- This migration must NOT change canonical behavior: canon_version default
     -- is still gif-audit/2 (as set by migration 015).
@@ -324,7 +492,7 @@ BEGIN
         RAISE EXCEPTION 'compute_audit_event_hash owner is %, expected gif_admin', fn_owner;
     END IF;
 
-    RAISE NOTICE 'Migration 016 verified: chain writes serialized (advisory lock present), canon default = gif-audit/2 (unchanged), trigger intact, owner gif_admin';
+    RAISE NOTICE 'Migration 016 verified: chain writes serialized (lock table present, ungranted), partitions UTC month-aligned, canon default = gif-audit/2 (unchanged), trigger intact, owner gif_admin';
 END;
 $$;
 
