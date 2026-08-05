@@ -176,6 +176,12 @@ Medium-term:
 - Dynamic scope adjustment
 - Encryption at rest (required before productization)
 - Multi-tenant operational hardening
+- Per-scope audit chains for parallel append throughput — deferred until real
+  multi-tenant write volume demands it. Concurrent-write chain integrity at
+  single-chain scale is done: migration 016 serializes chain writes per month
+  partition (before it, the supported envelope was strictly serialized audit
+  writes). Per-scope chains would change the canonical audit-record form, so
+  they wait for demand, not convenience.
 
 ---
 
