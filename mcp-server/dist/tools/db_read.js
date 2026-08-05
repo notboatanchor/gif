@@ -176,9 +176,13 @@ export async function executeDbRead(args, persona, sessionId) {
         const query = `SELECT * FROM ${quoteIdentifier(table)} ${whereString} LIMIT ${limitParam}`;
         const result = await pool.query(query, [...filterValues, limit]);
         // Log reads against audit-class tables for chain-of-custody (Sprint 5).
-        // Fire-and-forget: failure must not mask the read response.
+        // Awaited, not fire-and-forget: _logAuditRead never throws (its internal
+        // catch means failure cannot mask the read response), and the shutdown
+        // drain in index.ts relies on every audit write settling before the
+        // tools/call handler resolves — an unawaited write here escapes the drain
+        // and can be lost at SIGTERM.
         if (AUDIT_CLASS_TABLES.has(table)) {
-            void logAuditRead({
+            await logAuditRead({
                 readerPersonaId: persona.persona_id,
                 readerSessionId: sessionId,
                 queriedTable: table,
