@@ -10,6 +10,8 @@ GIF is currently maintained by one person. There is no response SLA on issues or
 
 If you are building something on top of GIF and have a specific need, open an issue describing it. Concrete use cases drive prioritization.
 
+Issues, pull requests, and comments written with AI tools are held to the [AI-Assisted Contributions](#ai-assisted-contributions) policy below. Undisclosed or unverified AI-generated submissions are closed without review.
+
 ---
 
 ## Getting Started
@@ -36,6 +38,23 @@ Before contributing code, read [`docs/gif-101.md`](docs/gif-101.md) — it expla
 Every PR is checked automatically by CI (GitHub Actions). The workflow runs type checking, lint, build, `npm audit --production`, and the full integration test suite against a fresh docker compose stack. A green CI run is the bar for review.
 
 PRs that touch the enforcement path, audit tables, or persona lifecycle require extra scrutiny. The non-negotiables in [`CLAUDE.md`](CLAUDE.md) define what cannot change without an architecture decision record.
+
+---
+
+## AI-Assisted Contributions
+
+GIF is itself developed with AI assistance, and says so — its commits carry co-author trailers naming the tool. AI-assisted contributions are welcome on the same terms. This policy covers issues, pull requests, and comments.
+
+- **Disclose it.** If an AI tool wrote or substantially shaped your submission, say so in the issue or PR description: one line naming the tool and what it did. A co-author trailer on the commits does not replace the line in the description.
+- **A human is accountable.** Whoever submits is the author. You have read and understood every line, you have run it yourself (for a PR, the full suite — `./scripts/test-local.sh`), and you can answer review questions in your own words. "The model wrote that part" is not an answer.
+- **No autonomous submissions.** An issue, PR, or comment filed by an agent without a human who asked for that specific submission and reviewed its content is not accepted.
+- **Verify before you claim.** A bug report is reproduced by you against the actual code, not inferred by a model. A claim that the code is broken, drifts, or mismatches cites the file and line — the same rule this repository applies to itself (see "Structural claims about the code cite their source" in [`CLAUDE.md`](CLAUDE.md)). Suspected vulnerabilities follow [`SECURITY.md`](SECURITY.md) and the same bar: reproduced, not model-inferred.
+
+**What happens otherwise.** A submission that is undisclosed AI output, that its submitter cannot explain, that was not run, or that is low-effort or bulk-generated (drive-by refactors, unreproduced "vulnerability" reports, documentation churn) is closed without review. The call is the maintainer's judgment and is not debated in the thread. A close under this policy is not a verdict on the person — the same change may be resubmitted with disclosure and verification. Repeated submissions of this kind may lead to a block.
+
+Nothing here changes the Maintainer Note above: there is still no response or triage commitment, for AI-assisted submissions or any others.
+
+AI agents working in this repository: the operative instructions are in [`AGENTS.md`](AGENTS.md).
 
 ---
 

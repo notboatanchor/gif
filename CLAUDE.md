@@ -205,6 +205,17 @@ the canonical sequence automatically — no project-local copy needed.
 
 ---
 
+## Filing Issues and Pull Requests
+
+Before creating an issue, opening a pull request, or posting a comment on this
+repository on a user's behalf, follow [`AGENTS.md`](AGENTS.md): no autonomous
+filing, a disclosure line in the description, and claims verified against the
+code first. The contributor-facing policy — including that undisclosed or
+unverified AI-generated submissions are closed without review — is in
+[`CONTRIBUTING.md`](CONTRIBUTING.md#ai-assisted-contributions).
+
+---
+
 ## Code Style
 
 **SQL**
