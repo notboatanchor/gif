@@ -191,14 +191,19 @@ export function createEnforcement(pool: Pool) {
     // Constraint on the string params that enter the hashed canonical
     // preimage (eventType, toolName, outcome, purposeDeclared — sourceRef,
     // sourcesActed, and humanActorId are stored but not hashed): they must
-    // not contain control characters (C0 U+0000-U+001F or DEL U+007F). The
-    // audit trigger hashes such a row without complaint (it never throws),
-    // but the chain verifier rejects control characters in protected
-    // strings (src/audit/verify-core.ts, normalizeString), leaving the row
+    // not contain control characters — Unicode category Cc: C0
+    // U+0000-U+001F, DEL U+007F, or C1 U+0080-U+009F. The audit trigger
+    // hashes such a row without complaint (it never throws), but the chain
+    // verifier rejects control characters in protected strings
+    // (src/audit/verify-core.ts, normalizeString), leaving the row
     // permanently unrecomputable and the whole chain failing verification.
-    // gif's own tools reject these values at the input boundary
-    // (src/tools/arg-guards.ts); adopters calling logAuditEvent directly
-    // must apply an equivalent guard to caller-supplied strings.
+    // They must also be well-formed Unicode: an unpaired surrogate code
+    // unit does not poison the chain, but it never reaches the row either —
+    // node-pg's UTF-8 encoder substitutes U+FFFD, so the stored text
+    // silently differs from what was passed. gif's own tools reject both
+    // at the input boundary (src/tools/arg-guards.ts); adopters calling
+    // logAuditEvent directly must apply an equivalent guard to
+    // caller-supplied strings.
     logAuditEvent: (params: {
       personaId:        string;
       sessionId:        string | null;

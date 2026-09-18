@@ -84,8 +84,8 @@ export async function executePersonaRevoke(
   }
 
   // Runtime form of the declared string constraints (minLength 1; whitespace-
-  // only and control characters also rejected — see nonEmptyStringArgError's
-  // doc). The DB's NOT NULL on revocation_log catches absent reason/revoked_by
+  // only values, control characters, and unpaired surrogates also rejected —
+  // see nonEmptyStringArgError's doc). The DB's NOT NULL on revocation_log catches absent reason/revoked_by
   // but not empty or blank strings — a revocation must carry a real reason
   // and actor identity.
   const stringArgError = nonEmptyStringArgError([

@@ -157,7 +157,7 @@ if (nonEmptyStringArgError([['purpose', 'real purpose'], ['created_by', 'ops']])
   fail('nonEmptyStringArgError accepts non-empty strings');
 }
 
-// Control characters (C0 + DEL) embedded in an otherwise non-empty string:
+// Control characters (Unicode category Cc: C0, DEL, C1) embedded in an otherwise non-empty string:
 // they survive .trim(), and via persona.purpose they reach purpose_declared
 // inside the hashed audit canonical form, where the verifier's
 // normalizeString rejects them — the row hashes fine at emit and can never
@@ -178,6 +178,28 @@ for (const [value, label] of [
   } else {
     fail(`nonEmptyStringArgError rejects ${label}`, `got ${JSON.stringify(msg)}`);
   }
+}
+// Unpaired surrogate code units (what a JSON escape for a lone surrogate parses
+// to). The verifier rejects them, and node-pg would substitute U+FFFD before
+// the wire — the stored text would silently differ from the caller's input.
+// Built with String.fromCharCode: no invisible characters in this source.
+for (const [value, label] of [
+  ['lone high ' + String.fromCharCode(0xd800) + ' surrogate', 'unpaired high surrogate'],
+  ['lone low ' + String.fromCharCode(0xdc00) + ' surrogate', 'unpaired low surrogate'],
+  [String.fromCharCode(0xdc00) + String.fromCharCode(0xd800), 'reversed surrogate pair'],
+]) {
+  const msg = nonEmptyStringArgError([['purpose', value]]);
+  if (msg === 'purpose must not contain unpaired surrogates') {
+    pass(`nonEmptyStringArgError rejects ${label}`);
+  } else {
+    fail(`nonEmptyStringArgError rejects ${label}`, `got ${JSON.stringify(msg)}`);
+  }
+}
+// A valid surrogate pair (astral code point, e.g. an emoji) is well-formed.
+if (nonEmptyStringArgError([['purpose', 'ship it ' + String.fromCodePoint(0x1f680)]]) === null) {
+  pass('nonEmptyStringArgError accepts a valid surrogate pair (astral code point)');
+} else {
+  fail('nonEmptyStringArgError accepts a valid surrogate pair (astral code point)');
 }
 // Same rule on a non-purpose field — the guard is deliberately broad.
 {
@@ -407,6 +429,23 @@ for (const field of ['issuing_entity', 'purpose', 'created_by', 'valid_until']) 
     pass(`persona_create rejects ${field} with an embedded newline (audited handler-level isError)`);
   } else {
     fail(`persona_create rejects ${field} with an embedded newline`,
+      `isError=${result.isError} error=${JSON.stringify(msg)}`);
+  }
+}
+
+// persona_create: an unpaired surrogate takes the same audited handler-level
+// isError path, on its own branch of the guard.
+{
+  const result = await executePersonaCreate(
+    { ...validCreateArgs, purpose: 'unpaired ' + String.fromCharCode(0xd800) + ' surrogate' },
+    managerPersona,
+    SESSION_ID,
+  );
+  const msg = errorText(result);
+  if (result.isError === true && msg === 'purpose must not contain unpaired surrogates') {
+    pass('persona_create rejects purpose with an unpaired surrogate (audited handler-level isError)');
+  } else {
+    fail('persona_create rejects purpose with an unpaired surrogate',
       `isError=${result.isError} error=${JSON.stringify(msg)}`);
   }
 }

@@ -21,7 +21,7 @@ attested-but-structured verification.
 
 | File | Role |
 |------|------|
-| `audit-record-contract.ts` | Reference verifier — core skeleton + typed-extension mechanism (`extensions` keyed object), sorted-JSON canonicalization (NFC/trim/length-cap/no-control-chars), SHA-256 hash chain, verification, and the attestation-manifest validator. No storage / no append-only enforcement (that is attested). |
+| `audit-record-contract.ts` | Reference verifier — core skeleton + typed-extension mechanism (`extensions` keyed object), sorted-JSON canonicalization (NFC/trim/length-cap/no-control-chars/well-formed-Unicode), SHA-256 hash chain, verification, and the attestation-manifest validator. No storage / no append-only enforcement (that is attested). |
 | `vectors.ts` | Conformance vectors C-REC-1…7, input→expected style. Includes **two fixed known-answer tests** (single-extension + two-extension) for cross-implementation hash interop. |
 | `run.ts` | Zero-dependency runner. |
 

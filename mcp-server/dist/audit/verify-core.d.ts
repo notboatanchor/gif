@@ -105,9 +105,9 @@ export interface ChainVerifyResult {
 }
 /**
  * Canonical-form string normalization (gif-audit/1 and /2): Unicode NFC, then
- * trim leading/trailing ASCII space (U+0020) only, reject control characters,
- * cap length at 8192. Applied to every protected string value before
- * serialization.
+ * trim leading/trailing ASCII space (U+0020) only, reject control characters
+ * (Unicode category Cc) and unpaired surrogate code units, cap length at 8192.
+ * Applied to every protected string value before serialization.
  *
  * Trim charset = U+0020 only, matching the DB trigger's btrim(normalize(x,NFC)).
  * JS `.trim()` strips the full Unicode whitespace set (NBSP, ideographic space,
@@ -127,7 +127,14 @@ export interface ChainVerifyResult {
  * byte-for-byte; a string that trips the control-char/cap throw here is surfaced
  * as `unrecomputable` — it fails verification without being reported as tamper.
  * Making the trigger itself reject what the verifier rejects is a
- * canonical-semantics change gated on an ADR, tracked separately.
+ * canonical-semantics change gated on an ADR, tracked separately. The
+ * unpaired-surrogate rejection has no trigger-side counterpart to diverge from:
+ * node-pg encodes string parameters with Node's UTF-8 encoder, which substitutes
+ * U+FFFD for an unpaired surrogate before the value reaches the wire (observed
+ * on pg-protocol 1.13.0: buffer-writer.js addString is a plain buffer.write) —
+ * so that rule's live surface is this pure core applied to records that did not
+ * come from a gif database row (exported / imported record sets), not a stored
+ * row.
  */
 export declare const MAX_FIELD_LEN = 8192;
 export declare function normalizeString(s: string): string;
