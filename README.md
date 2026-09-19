@@ -97,11 +97,14 @@ git clone --branch v0.2.3 https://github.com/notboatanchor/gif.git
 # git clone --branch v0.2.3 git@github.com:notboatanchor/gif.git
 
 cd gif
-cp .env.example .env   # fill in passwords and secrets
+# copy the template without its placeholder secret, then append a generated one
+grep -v '^IDENTITY_HMAC_SECRET=' .env.example > .env
+printf 'IDENTITY_HMAC_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+# then edit .env: set real passwords
 docker compose up -d --build
 ```
 
-On first start, the database initializes itself — roles, schema, and all migrations apply automatically. No manual SQL required.
+On first start, the database initializes itself — roles, schema, and all migrations apply automatically. No manual SQL required. The MCP server refuses to start if `IDENTITY_HMAC_SECRET` is left as the `.env.example` placeholder or is shorter than 32 bytes.
 
 Verify:
 ```bash

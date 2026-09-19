@@ -37,6 +37,7 @@
 // ADR-028: Per-adopter application credentials injected at construction time
 // =============================================================================
 import { createHmac, timingSafeEqual } from 'crypto';
+import { identitySecretProblem } from './identity-secret.js';
 // ---------------------------------------------------------------------------
 // createEnforcement()
 // Factory that returns enforcement functions bound to the provided pool.
@@ -336,7 +337,11 @@ async function _logAuditEvent(pool, params) {
 // Payload: { assignment_id: string, issued_at: ISO8601 }
 //
 // Steps:
-//   1. Parse and HMAC-verify the token (timing-safe comparison)
+//   1. Parse the token and HMAC-verify it against IDENTITY_HMAC_SECRET
+//      (timing-safe comparison). The secret is rejected outright if unset,
+//      or if it fails the security floor (the .env.example placeholder,
+//      or under IDENTITY_HMAC_SECRET_MIN_BYTES bytes) — see
+//      identity-secret.ts. Both checks happen before any HMAC is computed.
 //   2. Validate token age (reject if older than 15 minutes)
 //   3. Look up the assignment in user_persona_assignments
 //   4. Consume the token (one-way UPDATE: token_consumed false → true)
@@ -362,6 +367,17 @@ async function _verifyIdentityBinding(pool, params) {
     if (!secret) {
         console.error('[gif-enforcement] IDENTITY_HMAC_SECRET is not set — identity binding unavailable');
         return { valid: false, reason: 'IDENTITY_HMAC_SECRET not configured on server' };
+    }
+    // Security floor — reject a known/placeholder or too-short secret
+    // before ever computing an HMAC with it. timingSafeEqual below only
+    // proves a signature matches one computed with this secret; it does not
+    // help if the secret itself is public or guessable. See identity-secret.ts.
+    // The specific problem (which includes the secret's length) goes to the
+    // server log only; the caller-visible reason stays generic.
+    const secretProblem = identitySecretProblem(secret);
+    if (secretProblem) {
+        console.error(`[gif-enforcement] IDENTITY_HMAC_SECRET ${secretProblem} — identity binding refused`);
+        return { valid: false, reason: 'IDENTITY_HMAC_SECRET on server fails the minimum-strength check' };
     }
     const expectedHmac = createHmac('sha256', secret).update(payloadB64).digest('hex');
     // Pad to equal length for timingSafeEqual
