@@ -91,10 +91,15 @@ echo "Step 1/3  Bootstrap (roles, schemas)"
 run_as_super -v gif_dedicated_db=on < "$ROOT/gif/schema/000_bootstrap.sql"
 
 # Step 2: Set role passwords (as superuser, no passwords in SQL files)
+# Passwords are passed as psql variables and quoted by psql (:'var'); the
+# heredoc is quoted so bash never expands them into the SQL text. Same form as
+# ops/docker/init-db.sh — keep the two apply-paths in step.
 echo "Step 2/3  Set role passwords"
-run_as_super <<SQL
-ALTER ROLE gif_admin PASSWORD '$GIF_ADMIN_PASSWORD';
-ALTER ROLE gif_app   PASSWORD '$GIF_APP_PASSWORD';
+run_as_super \
+    -v gif_admin_pw="$GIF_ADMIN_PASSWORD" \
+    -v gif_app_pw="$GIF_APP_PASSWORD" <<'SQL'
+ALTER ROLE gif_admin PASSWORD :'gif_admin_pw';
+ALTER ROLE gif_app   PASSWORD :'gif_app_pw';
 SQL
 
 # Step 3: GIF schema migrations (as gif_admin)
