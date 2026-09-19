@@ -1,0 +1,19 @@
+# Build-context allowlist for mcp-server/Dockerfile.
+#
+# Everything is excluded, then only what the image build needs is re-included.
+# An allowlist rather than a denylist on purpose: a stray local file in this
+# directory (a scratch script, a local .env, an editor backup) must never land
+# in an image layer, and a denylist only covers the names someone thought of.
+#
+# Without this file, `COPY . .` runs after `npm ci` and copies the host's
+# node_modules/ over the freshly installed one, plus dist/, the test harnesses
+# and any untracked file, into the image.
+#
+# The image needs: the manifests (npm ci), tsconfig.json + src/ (npm run build).
+# dist/ is rebuilt inside the image, so the host copy is excluded too — a stale
+# host dist/ file with no matching src/ file would otherwise survive the build.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src
