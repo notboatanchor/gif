@@ -24,10 +24,15 @@
 //   3. Computed hash matches expected SHA-256 of the preimage
 //   4. gif_app cannot UPDATE event_hash (append-only RLS)
 //   5. audit_chain_anchors INSERT and SELECT work for gif_app
+//
+// Also runs the shared canonical-form rejection table (normalization_cases.mjs)
+// against this file's canonicalizer replica — pure, before any DB work.
 // =============================================================================
 
 import pg from 'pg';
 import crypto from 'crypto';
+
+import { runNormalizationCases } from './normalization_cases.mjs';
 
 const { Pool } = pg;
 
@@ -63,8 +68,13 @@ function fail(label, detail) {
 const MAX_FIELD_LEN = 8192;
 
 function normalizeString(str) {
-  if (/[\u0000-\u001f\u007f]/.test(str)) {
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(str)) {
     throw new Error('control character in protected string field');
+  }
+  // Well-formed Unicode only — under the `u` flag \p{Surrogate} matches
+  // unpaired surrogate code units only (a valid pair reads as one code point).
+  if (/\p{Surrogate}/u.test(str)) {
+    throw new Error('unpaired surrogate in protected string field');
   }
   // Trim ASCII space (U+0020) only — matches PG btrim, not JS .trim().
   const n = str.normalize('NFC').replace(/^ +| +$/g, '');
@@ -122,6 +132,10 @@ function recomputeCanonicalHash(row) {
 const pool = new Pool(dbConfig);
 
 console.log('\nSprint 5 — Hash Chain Tests\n');
+
+// Rejection set of this file's canonicalizer replica — the shared table
+// (normalization_cases.mjs) run against every canonicalizer site. Pure; no DB.
+runNormalizationCases(normalizeString, 'hash-chain replica', pass, fail);
 
 try {
   // Fetch a persona to use for test events

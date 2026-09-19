@@ -87,6 +87,69 @@ before proceeding. No manual intervention needed.
 
 ---
 
+## Before upgrading past v0.2.2: check for control characters
+
+Releases after `v0.2.2` verify the audit chain against the full control-character
+rule of the audit record contract: a hashed text field (`event_type`,
+`tool_name`, `outcome`, `purpose_declared`) may not contain any Unicode control
+character — C0 (U+0000–U+001F), DEL (U+007F), or **C1 (U+0080–U+009F)**. Through
+`v0.2.2` the verifier rejected C0 and DEL only, so a row carrying a C1 character
+verified; after the upgrade the same row is reported as **unrecomputable** and
+the verifier exits non-zero. It is not reported as tampering, and nothing in the
+database changes — but the row can never be made verifiable, because audit data
+is never rewritten.
+
+Two things can put a control character into a hashed field:
+
+1. **A persona created before `v0.2.1`.** `persona_create` has rejected control
+   characters since `v0.2.1`; earlier releases did not. A persona's `purpose` is
+   copied into `purpose_declared` on every audit row that persona generates, so
+   one persona whose purpose was pasted from a document with an embedded control
+   character (NEL, U+0085, is the usual one) keeps producing unrecomputable rows
+   for as long as it is active.
+2. **Your own tool server calling `logAuditEvent` directly** with strings it has
+   not checked. gif's own tools guard their inputs; `logAuditEvent` does not
+   alter or reject what you pass it (see the constraint documented on the export
+   in `mcp-server/src/enforcement.ts`).
+
+Check both before you upgrade. Run as `gif_admin` against your gif database:
+
+```sql
+-- Personas whose purpose contains a control character.
+SELECT persona_id, status, issuing_entity
+  FROM gif.personas
+ WHERE purpose ~ '[\u0001-\u001f\u007f-\u009f]';
+
+-- Audit rows already carrying one in a hashed text field.
+SELECT count(*)
+  FROM gif.audit_events
+ WHERE event_type       ~ '[\u0001-\u001f\u007f-\u009f]'
+    OR tool_name        ~ '[\u0001-\u001f\u007f-\u009f]'
+    OR outcome::text    ~ '[\u0001-\u001f\u007f-\u009f]'
+    OR purpose_declared ~ '[\u0001-\u001f\u007f-\u009f]';
+```
+
+Both queries returning nothing means the upgrade changes no verification result
+for you.
+
+If the first query returns an **active** persona: revoke it with
+`persona_revoke` and create a replacement with `persona_create`, which rejects
+control characters, so the replacement's purpose is clean. Do this before
+upgrading if you can — every call the old persona makes adds another row the
+upgraded verifier cannot recompute.
+
+If the second query returns a non-zero count, those rows will be listed as
+unrecomputable by the upgraded verifier, permanently. Record the verifier output
+and its cause; do not attempt repair. If the rows came from your own
+`logAuditEvent` calls, add a guard in your tool server that rejects control
+characters and unpaired surrogates in `eventType`, `toolName`, `outcome`, and
+`purposeDeclared` before the call.
+
+(The character class above also matches C0 and DEL. Rows carrying those already
+fail verification on `v0.2.1` and later; the query finds them too.)
+
+---
+
 ## After upgrading: verify
 
 Confirm the new migrations are recorded:

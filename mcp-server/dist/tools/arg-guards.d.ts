@@ -8,7 +8,7 @@ export declare function findMissingRequiredArg(required: readonly string[] | und
 /**
  * Returns an error message if any of the named values is not a non-empty
  * string (the runtime form of `type: 'string', minLength: 1`), else null.
- * Deliberately stricter than the declared minLength on two counts:
+ * Deliberately stricter than the declared minLength on three counts:
  *
  * - Whitespace-only values are rejected — a purpose or reason of ' '
  *   satisfies minLength but carries zero governance content.
@@ -21,17 +21,25 @@ export declare function findMissingRequiredArg(required: readonly string[] | und
  *   row without complaint (it never throws), producing a row that can
  *   never be recomputed. No guarded governance-metadata string legitimately
  *   contains a control character, so the rule is applied to every field
- *   this helper covers, not just purpose. Deliberately WIDER than the
- *   verifier's rejection set (C0+DEL): C1 controls (U+0080-U+009F, e.g.
- *   NEL) pass the verifier and cannot poison the chain, but they are still
- *   control characters in governance text. A guard stricter than the
- *   verifier is divergence-safe; the verifier itself is canonical-form
- *   contract and is not widened here. Only the control-character half of
- *   the verifier's normalizeString is mirrored; its other rejection — the
- *   8192-char length cap (MAX_FIELD_LEN) — needs no input-boundary twin,
- *   because the one guarded value that reaches the hashed preimage
- *   (purpose, copied to purpose_declared) is bounded far below the cap by
- *   its VARCHAR(1000) column (schema/001_gif_core.sql:85).
+ *   this helper covers, not just purpose. The rejected set is the
+ *   verifier's own — Unicode category Cc, the same character class
+ *   normalizeString tests — so no value this guard admits can trip the
+ *   verifier's control-character rejection.
+ * - Unpaired surrogate code units are rejected (a JSON `\uD800`-style
+ *   escape in a tool argument parses to one). The verifier's
+ *   normalizeString rejects them too, but the reason to stop them here is
+ *   different: a lone surrogate never reaches the row. node-pg encodes
+ *   string parameters with Node's UTF-8 encoder (pg-protocol
+ *   buffer-writer.js addString, a plain buffer.write), which substitutes
+ *   U+FFFD before the value goes on the wire, so the stored governance text
+ *   would silently differ from what the caller supplied. Rejecting at the input boundary keeps the record equal to the
+ *   input.
+ *
+ * The verifier's remaining rejection — the 8192-char length cap
+ * (MAX_FIELD_LEN) — needs no input-boundary twin, because the one guarded
+ * value that reaches the hashed preimage (purpose, copied to
+ * purpose_declared) is bounded far below the cap by its VARCHAR(1000)
+ * column (schema/001_gif_core.sql:85).
  *
  * This is the audited in-handler value-guard path per GIF-022 §C2.7 — do
  * NOT express the control-character rule as an inputSchema `pattern`, which

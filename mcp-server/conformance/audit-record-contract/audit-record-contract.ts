@@ -115,11 +115,12 @@ export type ProfileId = keyof typeof PROFILES;
 // One canonicalizer for the whole record, including the nested `extensions`, so
 // adopters run clearance assertions (#2809) and audit records on the same code
 // path. Protected string VALUES are normalized (NFC, trim U+0020 only, length
-// cap, no control characters). Object KEYS — including extension type ids and registered
-// field names — are a controlled ASCII registry vocabulary and are serialized
-// as-is (sorted), NOT passed through value normalization. null encodes
-// distinguishably from "". No bare numbers in /2: every extension value is a
-// string, boolean, or null — each has exactly one canonical JSON form.
+// cap, no control characters, well-formed Unicode). Object KEYS — including
+// extension type ids and registered field names — are a controlled ASCII
+// registry vocabulary and are serialized as-is (sorted), NOT passed through
+// value normalization. null encodes distinguishably from "". No bare numbers in
+// /2: every extension value is a string, boolean, or null — each has exactly one
+// canonical JSON form.
 // ---------------------------------------------------------------------------
 
 export const MAX_FIELD_LEN = 8192;
@@ -131,9 +132,16 @@ export const MAX_FIELD_LEN = 8192;
 export const MAX_DEPTH = 64;
 
 export function normalizeString(s: string): string {
-  // Control characters are not permitted in a protected string field.
-  if (/[\u0000-\u001f\u007f]/.test(s)) {
+  // Control characters (Unicode category Cc: U+0000–U+001F and U+007F–U+009F)
+  // are not permitted in a protected string field.
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(s)) {
     throw new Error('control character in protected string field');
+  }
+  // Well-formed Unicode only (§2.3): a value carrying an unpaired surrogate code
+  // unit is rejected. Under the `u` flag a valid surrogate pair is read as one
+  // astral code point, so \p{Surrogate} matches unpaired code units only.
+  if (/\p{Surrogate}/u.test(s)) {
+    throw new Error('unpaired surrogate in protected string field');
   }
   // Trim U+0020 (ASCII space) only, not the full whitespace class, to match
   // the contract's §2.3 (PG btrim parity). Control chars are already rejected above;

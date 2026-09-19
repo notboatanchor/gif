@@ -21,6 +21,9 @@
 // Structure:
 //   Part 1 — Pure-core unit tests (no DB). Uses replicated pure functions
 //             matching the trigger's preimage contract exactly. Exercises:
+//               (0)-(0d) known-answer digests, trim-charset parity, and the
+//                   rejection set (control characters + unpaired surrogates,
+//                   shared table in normalization_cases.mjs)
 //               (a) clean 3-row chain → 0 anomalies
 //               (b) tampered field (event_type) → recompute mismatch detected
 //               (c) dropped middle row → linkage break detected
@@ -38,6 +41,8 @@
 
 import pg from 'pg';
 import crypto from 'crypto';
+
+import { runNormalizationCases } from './normalization_cases.mjs';
 
 const { Pool } = pg;
 
@@ -77,8 +82,14 @@ function fail(label, detail) {
 const MAX_FIELD_LEN = 8192;
 
 function normalizeString(s) {
-  if (/[\u0000-\u001f\u007f]/.test(s)) {
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(s)) {
     throw new Error('control character in protected string field');
+  }
+  // Well-formed Unicode only (no unpaired surrogates). Derived independently of
+  // the shipped core's /\p{Surrogate}/u test, in keeping with this replica's
+  // purpose: two derivations that must agree.
+  if (!s.isWellFormed()) {
+    throw new Error('unpaired surrogate in protected string field');
   }
   // Trim ASCII space (U+0020) only — matches PG btrim, not JS .trim().
   const n = s.normalize('NFC').replace(/^ +| +$/g, '');
@@ -544,6 +555,17 @@ const KAT_CG2_DIGEST = 'd494769c1ae442ea88dd190068747abf63c0568a3b856f85791b1a50
          `got ${JSON.stringify(normalizeString('reconcile  '))}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Test 1(0d): rejection set — control characters (Unicode category Cc: C0,
+//             DEL, C1) and unpaired surrogate code units. The shared table
+//             (normalization_cases.mjs) is the same one run against the shipped
+//             core and the conformance verifier in
+//             test_normalization_rejection.mjs — one table, every canonicalizer
+//             site, so a site that drifts fails instead of passing alone.
+// ---------------------------------------------------------------------------
+
+runNormalizationCases(normalizeString, 'chain-verifier replica', pass, fail);
 
 // ---------------------------------------------------------------------------
 // Test 1(a): clean 3-row chain → 0 anomalies

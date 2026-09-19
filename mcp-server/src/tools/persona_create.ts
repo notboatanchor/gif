@@ -144,7 +144,8 @@ export async function executePersonaCreate(
   }
 
   // Runtime form of the declared string constraints (minLength 1; whitespace-
-  // only and control characters also rejected). The DB's NOT NULL catches
+  // only values, control characters, and unpaired surrogates also rejected).
+  // The DB's NOT NULL catches
   // absent values but not empty or blank strings — and a persona with a blank
   // purpose would defeat the purpose-non-nullable guarantee. A control
   // character in purpose would poison the audit chain: copied into

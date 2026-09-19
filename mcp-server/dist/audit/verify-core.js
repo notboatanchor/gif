@@ -34,9 +34,9 @@ import { createHash } from 'crypto';
 // ---------------------------------------------------------------------------
 /**
  * Canonical-form string normalization (gif-audit/1 and /2): Unicode NFC, then
- * trim leading/trailing ASCII space (U+0020) only, reject control characters,
- * cap length at 8192. Applied to every protected string value before
- * serialization.
+ * trim leading/trailing ASCII space (U+0020) only, reject control characters
+ * (Unicode category Cc) and unpaired surrogate code units, cap length at 8192.
+ * Applied to every protected string value before serialization.
  *
  * Trim charset = U+0020 only, matching the DB trigger's btrim(normalize(x,NFC)).
  * JS `.trim()` strips the full Unicode whitespace set (NBSP, ideographic space,
@@ -56,13 +56,29 @@ import { createHash } from 'crypto';
  * byte-for-byte; a string that trips the control-char/cap throw here is surfaced
  * as `unrecomputable` — it fails verification without being reported as tamper.
  * Making the trigger itself reject what the verifier rejects is a
- * canonical-semantics change gated on an ADR, tracked separately.
+ * canonical-semantics change gated on an ADR, tracked separately. The
+ * unpaired-surrogate rejection has no trigger-side counterpart to diverge from:
+ * node-pg encodes string parameters with Node's UTF-8 encoder, which substitutes
+ * U+FFFD for an unpaired surrogate before the value reaches the wire (observed
+ * on pg-protocol 1.13.0: buffer-writer.js addString is a plain buffer.write) —
+ * so that rule's live surface is this pure core applied to records that did not
+ * come from a gif database row (exported / imported record sets), not a stored
+ * row.
  */
 export const MAX_FIELD_LEN = 8192;
 export function normalizeString(s) {
-    // Control characters (C0 + DEL) are not permitted in a protected string field.
-    if (/[\u0000-\u001f\u007f]/.test(s)) {
+    // Control characters — Unicode category Cc: C0 (U+0000-U+001F), DEL (U+007F),
+    // and C1 (U+0080-U+009F) — are not permitted in a protected string field.
+    if (/[\u0000-\u001f\u007f-\u009f]/.test(s)) {
         throw new Error('control character in protected string field');
+    }
+    // Well-formed Unicode only. An unpaired surrogate code unit has no UTF-8
+    // encoding, so a preimage carrying one has no single byte form to hash
+    // (encoders variously reject it or substitute U+FFFD). Under the `u` flag a
+    // valid surrogate pair is read as one astral code point, so \p{Surrogate}
+    // matches unpaired code units only.
+    if (/\p{Surrogate}/u.test(s)) {
+        throw new Error('unpaired surrogate in protected string field');
     }
     // Trim ASCII space (U+0020) only — matches PG btrim; NOT JS .trim() (full
     // Unicode whitespace), which would diverge from the trigger on e.g. NBSP.
@@ -233,7 +249,8 @@ export function verifyPartition(partitionKey, rows) {
         // informational `uncheckable` — while ANY throw out of recomputeHash on
         // a RECOGNIZED version is an unverifiable row in a tamper-evidence
         // chain — `unrecomputable`, which fails verification. In practice the
-        // throw is normalizeString's control-character / length-cap rejection;
+        // throw is one of normalizeString's rejections (control character,
+        // unpaired surrogate, length cap);
         // canonicalize's other throw branches (non-finite number,
         // uncanonicalizable value) are unreachable for AuditRow-shaped input.
         // Neither cause is reported as tamper.
