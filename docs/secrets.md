@@ -15,7 +15,7 @@ This decision is recorded in [`decisions/GIF-017-secrets-via-env-vars.md`](../de
 | `POSTGRES_PASSWORD` | Docker-managed PostgreSQL superuser password. Used only by the `postgres` container during initialization. Not used by the MCP server at runtime. | Restart `postgres` container; gif_admin and gif_app passwords must be reset if they were derived from this. |
 | `GIF_ADMIN_PASSWORD` | Password for the `gif_admin` PostgreSQL role. Schema owner; runs migrations. Not used by the MCP server at runtime. | Restart any process running as `gif_admin` (typically migration tooling); MCP server is unaffected. |
 | `GIF_APP_PASSWORD` (also `PGPASSWORD` for the MCP server's connection) | Password for the `gif_app` PostgreSQL role. The MCP server connects as `gif_app` for all runtime operations. | Restart the MCP server. Active sessions in flight may fail. |
-| `IDENTITY_HMAC_SECRET` | HMAC signing key for identity tokens issued by the `bin/issue_identity_token.ts` CLI and verified at `persona_create`. **Load-bearing.** | Rotating invalidates all unconsumed identity tokens. See [Rotation procedures](#rotation-procedures) below. |
+| `IDENTITY_HMAC_SECRET` | HMAC signing key for identity tokens issued by the `mcp-server/src/cli/issue_identity_token.ts` CLI and verified at `persona_create`. **Load-bearing.** Must be at least 32 bytes and must not be the `.env.example` placeholder — the server refuses to start otherwise (a short or publicly known key lets anyone forge a valid `identity_token`). | Rotating invalidates all unconsumed identity tokens. See [Rotation procedures](#rotation-procedures) below. |
 
 ### Non-secret configuration (still required, but not sensitive)
 
@@ -29,7 +29,7 @@ This decision is recorded in [`decisions/GIF-017-secrets-via-env-vars.md`](../de
 | `PORT` | MCP server HTTP port | `3100` |
 | `MCP_BASE_URL` | Base URL for integration tests | derived from `PORT` |
 
-`.env.example` in the repository root enumerates the same set. Copy it to `.env`, populate, never commit.
+`.env.example` in the repository root enumerates the same set. Copy it to `.env`, populate, never commit. Generate `IDENTITY_HMAC_SECRET` with `openssl rand -hex 32` — the server refuses to start if it is left as the `.env.example` placeholder or is shorter than 32 bytes.
 
 ---
 
@@ -50,7 +50,9 @@ GIF works with any secret-management system that can populate environment variab
 Simplest pattern. `.env` is read automatically by `docker compose`. File should be `chmod 600` and gitignored (the repository's `.gitignore` already lists it).
 
 ```bash
-cp .env.example .env
+# copy the template without its placeholder secret, then append a generated one
+grep -v '^IDENTITY_HMAC_SECRET=' .env.example > .env
+printf 'IDENTITY_HMAC_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
 # Edit .env with real values
 docker compose up -d
 ```
@@ -177,6 +179,8 @@ No data loss. Brief availability impact during restart.
 
 Rotating the HMAC secret invalidates all identity tokens that were issued under the previous secret but not yet consumed at `persona_create`. This is by design: a compromised HMAC secret means any outstanding tokens may be forged.
 
+The new value is held to the same floor as initial setup: at least 32 bytes, and not the `.env.example` placeholder. The MCP server checks this at startup and refuses to boot on a value that fails it — generate the replacement with `openssl rand -hex 32` before the "Update `IDENTITY_HMAC_SECRET`" step in either procedure below, so the restart that follows doesn't fail closed.
+
 **Standard rotation (no compromise suspected):**
 
 1. Wait for the issuance window to drain — confirm no unconsumed tokens remain:
@@ -185,7 +189,7 @@ Rotating the HMAC secret invalidates all identity tokens that were issued under 
    WHERE token_consumed_at IS NULL
      AND identity_token IS NOT NULL;
    ```
-   Coordinate with whoever issues identity tokens (typically a human admin running `bin/issue_identity_token.ts`) to pause issuance until the rotation completes.
+   Coordinate with whoever issues identity tokens (typically a human admin running `mcp-server/src/cli/issue_identity_token.ts`) to pause issuance until the rotation completes.
 2. Update `IDENTITY_HMAC_SECRET` in the secret manager.
 3. Restart the MCP server.
 4. Resume token issuance under the new secret.

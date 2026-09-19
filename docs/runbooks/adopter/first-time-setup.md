@@ -49,13 +49,20 @@ Required variables — descriptions from `.env.example`:
 | `PGDATABASE` | Database name | `gif` |
 | `PGPORT_HOST` | Host-side port PostgreSQL is exposed on | `5432` |
 | `PORT` | Host-side port the MCP server listens on | `3100` |
-| `IDENTITY_HMAC_SECRET` | HMAC secret for identity token signing | none |
+| `IDENTITY_HMAC_SECRET` | HMAC secret for identity token signing — must be ≥32 bytes and not the `.env.example` placeholder | none |
 
 Generate a strong `IDENTITY_HMAC_SECRET`:
 
 ```bash
 openssl rand -hex 32
 ```
+
+The server refuses to start if `IDENTITY_HMAC_SECRET` is left as the
+`.env.example` placeholder (`changeme-use-openssl-rand-hex-32`) or is set to
+any value shorter than 32 bytes — a short or publicly known signing key lets
+anyone forge a valid `identity_token` for `persona_create`. See
+[`docs/secrets.md`](../../secrets.md#identity_hmac_secret--load-bearing) for
+rotation impact.
 
 Use a distinct, strong password for each of `POSTGRES_PASSWORD`, `GIF_ADMIN_PASSWORD`,
 and `GIF_APP_PASSWORD`. Do not commit `.env` — it is gitignored.

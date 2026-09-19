@@ -150,6 +150,39 @@ fail verification on `v0.2.1` and later; the query finds them too.)
 
 ---
 
+## Before upgrading past v0.2.3: check `IDENTITY_HMAC_SECRET`
+
+Releases after `v0.2.3` check `IDENTITY_HMAC_SECRET` at MCP server
+startup and refuse to boot if it is set to the `.env.example` placeholder
+(`changeme-use-openssl-rand-hex-32`) or to any value shorter than 32 bytes. A
+short or publicly known signing key lets anyone forge a valid `identity_token`
+for `persona_create` — see [`docs/secrets.md`](../../secrets.md#identity_hmac_secret--load-bearing)
+for the full rationale.
+
+Check the length of your current value without printing it — this prints only
+a byte count, never the secret itself:
+
+```bash
+printf %s "$IDENTITY_HMAC_SECRET" | wc -c
+```
+
+If the count is under 32, or the value is still the `.env.example`
+placeholder, the upgraded MCP server will refuse to start. Independently of
+startup, every `verifyIdentityBinding` call made through `gif-enforcement` at
+this version — and therefore gif's `persona_create` tool — fails closed: the
+secret is rejected before any token is checked against it. An adopter tool
+server that imports `gif-enforcement` but never calls `verifyIdentityBinding`
+is unaffected. Generate a replacement with `openssl rand -hex 32` and set it
+before upgrading.
+
+Rotating `IDENTITY_HMAC_SECRET` has its own consequences, independent of this
+floor check — see [Rotation procedures](../../secrets.md#rotation-procedures)
+in `docs/secrets.md`: rotating invalidates identity tokens that were issued
+under the previous secret but not yet consumed at `persona_create`. It does
+not affect already-consumed tokens or personas already created.
+
+---
+
 ## After upgrading: verify
 
 Confirm the new migrations are recorded:
