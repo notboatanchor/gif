@@ -28,6 +28,7 @@ This decision is recorded in [`decisions/GIF-017-secrets-via-env-vars.md`](../de
 | `PGUSER` | Postgres role for the MCP server | `gif_app` |
 | `PORT` | MCP server HTTP port | `3100` |
 | `GIF_BIND_ADDR` | Host address the two published Compose ports (MCP server and Postgres) bind to | `127.0.0.1` |
+| `GIF_ALLOWED_ORIGINS` | Hostnames accepted in a browser `Origin` header on `/mcp` — comma-separated, no scheme/port/path; replaces the default when set. Requests with no `Origin` header are always accepted | `localhost`, `127.0.0.1`, `[::1]` |
 | `MCP_BASE_URL` | Base URL for integration tests | derived from `PORT` |
 
 `.env.example` in the repository root enumerates the same set. Copy it to `.env`, populate, never commit. Generate `IDENTITY_HMAC_SECRET` with `openssl rand -hex 32` — the server refuses to start if it is left as the `.env.example` placeholder or is shorter than 32 bytes.

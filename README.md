@@ -106,7 +106,7 @@ docker compose up -d --build
 
 On first start, the database initializes itself — roles, schema, and all migrations apply automatically. No manual SQL required. The MCP server refuses to start if `IDENTITY_HMAC_SECRET` is left as the `.env.example` placeholder or is shorter than 32 bytes.
 
-The quick-start stack is a local development environment: both published ports (the MCP server and PostgreSQL) bind to `127.0.0.1`, so they are reachable from this machine only. To widen that, set `GIF_BIND_ADDR` (documented in `.env.example`); for a network-facing deployment, keep the default and follow [`docs/runbooks/adopter/production-deployment.md`](docs/runbooks/adopter/production-deployment.md).
+The quick-start stack is a local development environment: both published ports (the MCP server and PostgreSQL) bind to `127.0.0.1`, so they are reachable from this machine only. To widen that, set `GIF_BIND_ADDR` (documented in `.env.example`); for a network-facing deployment, keep the default and follow [`docs/runbooks/adopter/production-deployment.md`](docs/runbooks/adopter/production-deployment.md). The MCP endpoint also validates the browser `Origin` header, as the MCP specification requires: a request from a web page on any origin other than `localhost`, `127.0.0.1`, or `[::1]` is answered `403` unless its hostname is listed in `GIF_ALLOWED_ORIGINS`. Clients that send no `Origin` header — the MCP SDK clients, `curl` — are unaffected.
 
 Verify:
 ```bash
