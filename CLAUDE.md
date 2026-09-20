@@ -94,6 +94,20 @@ pre-validation rejection path, and do not demote the audited value guards to
 protocol throws — the boundary is normative (GIF-022 §C2.7, second amendment);
 moving it requires an ADR amendment, not a code fix.
 
+**`/mcp` transport guards: `Origin` is validated by gif; `Host` and body size
+belong to the reverse proxy.** The hosted server validates the `Origin` header
+on `/mcp` (an MCP Streamable HTTP MUST; allowlist via `GIF_ALLOWED_ORIGINS`,
+parsed once at startup, fail-fast on a malformed value) and answers `403` with
+**no audit event** — it is a transport-level rejection ahead of MCP parsing,
+on the same side of the GIF-022 §C2.7 boundary as the rule above. Do not add
+`Host`-header validation inside gif: the documented production shape forwards
+the original `Host` through a reverse proxy
+(`docs/runbooks/adopter/production-deployment.md`), so an in-server allowlist
+would `403` every proxied request. Request-body size and rate limits are also
+the proxy's job. A security finding that reads "no Host validation" or "no
+body cap" is answered by that runbook, not by a code change; changing the
+split is an owner decision.
+
 **Dispatcher does not auto-close sessions.** Session closure is caller-driven
 (`session_close` tool) or TTL-driven (`GIF_SESSION_TTL_SECONDS`, default
 86400). Do not add a `finally`-block close on the dispatch path — v0.1's
@@ -108,7 +122,10 @@ non-positive). See GIF-020, GIF-022 §C2.
 
 **Enforcement, audit, and schema changes require review before merge.** Any
 change touching `schema/`, `mcp-server/src/tools/`, `mcp-server/src/audit/`,
-`mcp-server/src/enforcement.ts`,
+`mcp-server/src/enforcement.ts`, `mcp-server/src/index.ts` (the dispatcher,
+the startup guards, and the `/mcp` transport guard), any module either of
+those two imports (today `persona.ts`, `session.ts`, `identity-secret.ts`,
+`origin-allowlist.ts` — the rule follows the import graph, not this list),
 or the audit trail must pass a code + security review and a clean-install
 (`npm ci`) test run before merge. These layers carry the framework's security
 and tamper-evidence guarantees; the review gate is mandatory for them, not

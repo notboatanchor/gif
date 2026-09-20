@@ -1,7 +1,8 @@
 # /gif/mcp-server/Dockerfile
 # MCP server — Node.js 22 / TypeScript (ADR-019, upgraded from 20 — Node 20 EOL Apr 2026)
-# Development image. Bind mount overlays source at runtime.
-# For production: remove bind mount, bake source into image at build time.
+# Self-contained image: source is copied in and compiled at build time, and the
+# repository's docker-compose.yml mounts nothing over /app. What runs is what
+# was built — rebuild the image to pick up a source change.
 
 FROM node:22-alpine
 
@@ -13,8 +14,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source — in development this is overlaid by bind mount at runtime.
-# Present here so the image is self-contained for future production builds.
+# Copy source. .dockerignore is an allowlist (manifests, tsconfig.json, src/),
+# so host node_modules/, dist/ and stray local files never enter the image.
 COPY . .
 
 # Compile TypeScript to JavaScript
