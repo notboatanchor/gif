@@ -243,6 +243,13 @@ unverified AI-generated submissions are closed without review — is in
 - A new migration must be wired into **both** apply-paths — `scripts/install.sh`
   (`GIF_MIGRATIONS`) and `ops/docker/init-db.sh` (`apply_migration` sequence).
   These are parallel and drift silently when only one is updated.
+- The two apply-paths are parallel in everything, not only the migration list:
+  role setup, how values reach psql (`-v` + `:'var'` inside a quoted heredoc —
+  never shell-expanded SQL), and migration recording. A change to either script
+  is mirrored in the other in the same PR, or the PR says why it does not
+  apply. CI exercises only `ops/docker/init-db.sh`, so drift in
+  `scripts/install.sh` is invisible to it — verify that path by hand against a
+  throwaway Postgres (role-password quoting drifted this way; fixed PR #71).
 - Caller-supplied SQL identifiers (table / column names) route through
   `mcp-server/src/tools/sql-identifier.ts` (`quoteIdentifier` = validate +
   escape); values are always parameterized (`$1, $2, …`). Never interpolate
