@@ -106,6 +106,8 @@ docker compose up -d --build
 
 On first start, the database initializes itself — roles, schema, and all migrations apply automatically. No manual SQL required. The MCP server refuses to start if `IDENTITY_HMAC_SECRET` is left as the `.env.example` placeholder or is shorter than 32 bytes.
 
+The quick-start stack is a local development environment: both published ports (the MCP server and PostgreSQL) bind to `127.0.0.1`, so they are reachable from this machine only. To widen that, set `GIF_BIND_ADDR` (documented in `.env.example`); for a network-facing deployment, keep the default and follow [`docs/runbooks/adopter/production-deployment.md`](docs/runbooks/adopter/production-deployment.md).
+
 Verify:
 ```bash
 curl -s http://localhost:3100/health

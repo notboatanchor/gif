@@ -49,6 +49,7 @@ Required variables — descriptions from `.env.example`:
 | `PGDATABASE` | Database name | `gif` |
 | `PGPORT_HOST` | Host-side port PostgreSQL is exposed on | `5432` |
 | `PORT` | Host-side port the MCP server listens on | `3100` |
+| `GIF_BIND_ADDR` | Host address both published ports bind to. The default is reachable from this machine only; see the note below before widening it | `127.0.0.1` |
 | `IDENTITY_HMAC_SECRET` | HMAC secret for identity token signing — must be ≥32 bytes and not the `.env.example` placeholder | none |
 
 Generate a strong `IDENTITY_HMAC_SECRET`:
@@ -66,6 +67,18 @@ rotation impact.
 
 Use a distinct, strong password for each of `POSTGRES_PASSWORD`, `GIF_ADMIN_PASSWORD`,
 and `GIF_APP_PASSWORD`. Do not commit `.env` — it is gitignored.
+
+Both published ports bind to `127.0.0.1` by default, so PostgreSQL and the MCP
+server are reachable from the Docker host only. That covers every command in
+this runbook, and a reverse proxy running on the same host. It does **not**
+cover a client on another machine, or a tool server running in a container
+outside this compose project — that traffic arrives from the Docker bridge, not
+loopback. For those, set `GIF_BIND_ADDR` in `.env` to `0.0.0.0` (all IPv4
+interfaces) or to one specific interface address, after replacing every
+`changeme` password. Without a host address Docker publishes a port on every
+interface and does so ahead of ufw-style host firewall rules, which is why the
+default is loopback. Network-facing deployments:
+[`production-deployment.md`](production-deployment.md).
 
 ---
 
