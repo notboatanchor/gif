@@ -56,6 +56,7 @@ import { validatePersona } from './persona.js';
 import { logAuditEvent, validateSessionHandle } from './session.js';
 import { TOOL_REGISTRY } from './tools/registry.js';
 import { findMissingRequiredArg } from './tools/arg-guards.js';
+import { identitySecretProblem } from './identity-secret.js';
 import pool from './db.js';
 const PORT = parseInt(process.env.PORT || '3100');
 // GIF_SESSION_TTL_SECONDS — deployment-wide hard TTL for governance sessions
@@ -78,6 +79,26 @@ const GIF_SHUTDOWN_TIMEOUT_SECONDS = parseInt(process.env.GIF_SHUTDOWN_TIMEOUT_S
 if (!Number.isFinite(GIF_SHUTDOWN_TIMEOUT_SECONDS) || GIF_SHUTDOWN_TIMEOUT_SECONDS <= 0
     || GIF_SHUTDOWN_TIMEOUT_SECONDS > MAX_SHUTDOWN_TIMEOUT_SECONDS) {
     throw new Error(`GIF_SHUTDOWN_TIMEOUT_SECONDS must be a positive integer <= ${String(MAX_SHUTDOWN_TIMEOUT_SECONDS)}; got ${process.env.GIF_SHUTDOWN_TIMEOUT_SECONDS ?? '<unset>'}`);
+}
+// IDENTITY_HMAC_SECRET — signing key for persona_create identity tokens,
+// verified in enforcement.ts (_verifyIdentityBinding). Checked once here at
+// startup; enforcement.ts re-reads the variable and re-applies the same floor
+// on every verification, so this check is fail-fast, not the only gate.
+// Unset is unchanged behavior: the server starts, and persona_create fails
+// closed at verify time ("IDENTITY_HMAC_SECRET not configured on server").
+// But a SET value that fails the security floor (the .env.example
+// placeholder, or under the identity-secret.ts minimum byte length) means
+// anyone can forge a valid identity_token right now — that is not a
+// condition to start up and fail closed on per-call, it is a condition to
+// refuse to start at all. Same fail-fast contract as GIF_SESSION_TTL_SECONDS
+// and GIF_SHUTDOWN_TIMEOUT_SECONDS above. Never log the secret value itself.
+const identityHmacSecret = process.env['IDENTITY_HMAC_SECRET'];
+if (identityHmacSecret) {
+    const identityHmacSecretProblem = identitySecretProblem(identityHmacSecret);
+    if (identityHmacSecretProblem) {
+        throw new Error(`IDENTITY_HMAC_SECRET ${identityHmacSecretProblem}. Generate a strong ` +
+            `value with 'openssl rand -hex 32' and set it before starting the server.`);
+    }
 }
 // ----------------------------------------------------------------------------
 // In-flight call tracking — shutdown drain support.

@@ -37,6 +37,7 @@
 // Sprint 5: Compliance Hardening — identity binding (ADR-021)
 // =============================================================================
 import { createHmac } from 'crypto';
+import { identitySecretProblem } from '../identity-secret.js';
 // ---------------------------------------------------------------------------
 // Token generation
 // ---------------------------------------------------------------------------
@@ -45,6 +46,18 @@ function issueToken(assignmentId) {
     if (!secret) {
         throw new Error('IDENTITY_HMAC_SECRET is not set.\n' +
             'Export it or source your .env file before running this command.');
+    }
+    // A token signed under a secret the server itself rejects (the
+    // .env.example placeholder, or under the minimum byte length) is useless —
+    // _verifyIdentityBinding refuses it before ever checking the signature.
+    // Refuse to issue it here rather than hand the operator a token that can
+    // never be redeemed.
+    const secretProblem = identitySecretProblem(secret);
+    if (secretProblem) {
+        throw new Error(`IDENTITY_HMAC_SECRET ${secretProblem}.\n` +
+            `A token signed with this secret would be refused at persona_create. ` +
+            `Generate a strong value with 'openssl rand -hex 32', set it in the ` +
+            `environment the server runs under, and re-run this command.`);
     }
     const payload = Buffer.from(JSON.stringify({
         assignment_id: assignmentId,
