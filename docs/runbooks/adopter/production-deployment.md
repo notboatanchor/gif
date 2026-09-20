@@ -66,6 +66,31 @@ gif.your-domain.internal {
 port 3100 with a TLS entrypoint. Restrict `/health` using a middleware IP
 allowlist.
 
+### Keep the published ports on loopback
+
+The repository's `docker-compose.yml` binds both published ports — the MCP
+server and PostgreSQL — to `127.0.0.1` by default. The nginx and Caddy examples
+above proxy to `localhost:3100`, so a proxy on the same host works with that
+default unchanged, and the proxy stays the only network-facing listener.
+
+This matters more under Docker than it would for a bare process. Docker's
+documentation states that publishing a port without a host address is
+["insecure by default"](https://docs.docker.com/engine/network/port-publishing/)
+— the port is published on every host interface — and that published-port
+traffic is ["diverted before it goes through the ufw firewall
+settings"](https://docs.docker.com/engine/network/packet-filtering-firewalls/#docker-and-ufw),
+so a host firewall rule does not by itself close a published port. The
+port-publishing page also warns that on Docker Engine releases older than
+28.0.0, hosts on the same L2 segment can still reach a port published to
+localhost; run 28.0.0 or later.
+
+`GIF_BIND_ADDR` in `.env` overrides the bind address — for example when the
+proxy runs on a different host, or a tool server in a container outside this
+compose project connects to PostgreSQL through the host's published port. Prefer
+one specific interface address over `0.0.0.0`, and never widen the bind while
+any password in `.env` is still the `.env.example` placeholder `changeme`: the
+PostgreSQL superuser can modify audit rows that the `gif_app` role cannot.
+
 ---
 
 ## 2. CORS Policy
@@ -324,6 +349,9 @@ session handle, itself a bearer token, stays valid for a wider window.
 ## 7. Pre-deployment checklist
 
 - [ ] TLS termination configured at reverse proxy
+- [ ] Published ports still bound to loopback (`docker compose ps` shows
+      `127.0.0.1:` on both), or `GIF_BIND_ADDR` widened deliberately with no
+      `changeme` password left in `.env`
 - [ ] `/health` restricted to internal network
 - [ ] Rate limiting configured at proxy layer
 - [ ] Audit partitions verified through at least 3 months from today
