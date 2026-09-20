@@ -93,14 +93,65 @@ PostgreSQL superuser can modify audit rows that the `gif_app` role cannot.
 
 ---
 
-## 2. CORS Policy
+## 2. Browser Origins (Origin Validation and CORS)
 
-GIF's MCP endpoint is called by AI clients — not browsers. CORS headers are
-not required for MCP-over-HTTP in most deployments.
+GIF's MCP endpoint is meant to be called by AI clients, not browsers — but a
+browser can still be pointed at it. In a DNS-rebinding attack, a page served
+from an attacker-controlled domain — one the operator merely has open in a
+tab — re-resolves that domain to `127.0.0.1`. The browser then treats the
+page's follow-up requests to whatever is listening locally as same-origin and
+applies no CORS restriction, but it still stamps them with the page's own
+origin, `Origin: http://attacker.example`. Binding to loopback (Section 1) does
+not stop this, because the request really does come from the local machine;
+checking that `Origin` value does.
 
-If your adopter application calls GIF from a browser context (uncommon),
-restrict `Access-Control-Allow-Origin` to your application's specific origin.
-Do not set `*`.
+The MCP specification therefore requires Streamable HTTP servers to validate
+the `Origin` header, and GIF does so on every `/mcp` request:
+
+- **No `Origin` header, or an empty one** — accepted. Non-browser clients (the
+  MCP SDK clients, `curl`, server-to-server callers) do not normally send one,
+  so they are unaffected. A non-browser client that does attach an `Origin`
+  is checked like any other.
+- **`Origin` present, non-empty, and its hostname is on the allowlist** —
+  accepted.
+- **`Origin` present, non-empty, and anything else** — including the literal
+  `null` origin browsers send from sandboxed contexts — rejected with
+  `403 Forbidden` and a JSON-RPC error body, before any MCP processing. No
+  audit event is written: the request is refused at the transport layer,
+  before governance evaluation begins. Each rejection is logged by the server
+  as `[server] Rejected /mcp request — invalid Origin: "…"`.
+
+The default allowlist is `localhost`, `127.0.0.1`, and `[::1]` (any port), so
+browser-based developer tools on the same machine keep working. If your adopter
+application calls GIF from a browser context (uncommon), set
+`GIF_ALLOWED_ORIGINS` to the application's hostname(s):
+
+```bash
+# hostnames only — comma-separated; no scheme, port, or path
+GIF_ALLOWED_ORIGINS=app.your-domain.internal
+```
+
+The configured list **replaces** the default — include `localhost` in it if
+you still need local browser tools. To refuse every browser origin, set it to
+a name that can never be a real origin, such as `origin.invalid` (the
+`.invalid` top-level domain is reserved and never resolves). The value is
+parsed once at startup; a malformed entry (a scheme, a port, a path, a
+wildcard, a stray dot) stops the server rather than being silently ignored.
+
+`/health` is not Origin-validated — it is not an MCP connection. The residual
+is small but real: on a deployment with no proxy in front, a rebinding page can
+still read the `/health` response and learn that GIF is running on that
+machine. Restrict `/health` at the proxy (Section 4).
+
+The `Host` header is deliberately **not** validated by GIF: the proxy examples
+in Section 1 forward the original `Host`, so a fixed allowlist inside GIF would
+reject every proxied request. Let the reverse proxy own hostname routing
+(`server_name` in nginx, the site address in Caddy).
+
+**CORS** is a separate, browser-side control. CORS response headers are not
+required for MCP-over-HTTP in most deployments. If a browser application does
+call GIF, restrict `Access-Control-Allow-Origin` at the proxy to that
+application's specific origin. Do not set `*`.
 
 ---
 
@@ -353,6 +404,8 @@ session handle, itself a bearer token, stays valid for a wider window.
       `127.0.0.1:` on both), or `GIF_BIND_ADDR` widened deliberately with no
       `changeme` password left in `.env`
 - [ ] `/health` restricted to internal network
+- [ ] `GIF_ALLOWED_ORIGINS` left unset, or set to exactly the browser
+      application hostnames that call `/mcp`
 - [ ] Rate limiting configured at proxy layer
 - [ ] Audit partitions verified through at least 3 months from today
 - [ ] Monthly partition task scheduled (cron or orchestration)

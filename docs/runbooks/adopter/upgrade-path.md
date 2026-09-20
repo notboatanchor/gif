@@ -183,6 +183,48 @@ not affect already-consumed tokens or personas already created.
 
 ---
 
+## Before upgrading past v0.2.3: browser callers and `GIF_ALLOWED_ORIGINS`
+
+Releases after `v0.2.3` validate the HTTP `Origin` header on every request to
+the MCP server's `/mcp` endpoint, as the MCP specification requires of
+Streamable HTTP servers. A request whose `Origin` is present, non-empty, and
+not on the allowlist is answered `403 Forbidden` before any MCP processing.
+
+**Who is unaffected:** any caller that sends no `Origin` header — the MCP SDK
+clients, `curl`, and server-to-server callers generally. In practice only
+browsers attach `Origin`, but the rule is about the header, not the client: a
+gateway or a custom client that adds one is checked too. A request with no
+`Origin` header is accepted exactly as before.
+Adopter tool servers that import `gif-enforcement` as a package are also
+unaffected: the check lives in gif's hosted MCP server, not in the enforcement
+package.
+
+**Who must act:** a deployment where a web application running in a browser
+calls gif's `/mcp` endpoint directly from an origin other than `localhost`,
+`127.0.0.1`, or `[::1]`. Before upgrading, set `GIF_ALLOWED_ORIGINS` in the MCP
+server's environment to the hostname(s) of that application — hostnames only,
+comma-separated, no scheme, port, or path:
+
+```bash
+GIF_ALLOWED_ORIGINS=app.your-domain.internal
+```
+
+The configured list replaces the default; add `localhost` to it if browser
+tools on the server's own machine (for example an MCP inspector UI) must keep
+working. A malformed value stops the server at startup rather than being
+silently ignored.
+
+**How to check after upgrading:** every rejected request is logged. Search the
+MCP server's log for `Rejected /mcp request` — for the Compose stack,
+`docker compose logs mcp-server | grep 'Rejected /mcp request'`. No matches
+means no caller is being refused; a match shows the `Origin` value to add to
+`GIF_ALLOWED_ORIGINS` (its hostname only) if that caller is legitimate.
+
+Details:
+[`production-deployment.md`](production-deployment.md#2-browser-origins-origin-validation-and-cors).
+
+---
+
 ## After upgrading: verify
 
 Confirm the new migrations are recorded:

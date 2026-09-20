@@ -49,7 +49,7 @@
 // GIF-020: Session closure semantics (caller-close + hard TTL)
 // GIF-022: v0.2 conformance surface
 // =============================================================================
-import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
+import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler, validateOriginHeader } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import http from 'http';
 import { validatePersona } from './persona.js';
@@ -57,6 +57,7 @@ import { logAuditEvent, validateSessionHandle } from './session.js';
 import { TOOL_REGISTRY } from './tools/registry.js';
 import { findMissingRequiredArg } from './tools/arg-guards.js';
 import { identitySecretProblem } from './identity-secret.js';
+import { ALLOWED_ORIGINS_ENV, parseAllowedOrigins } from './origin-allowlist.js';
 import pool from './db.js';
 const PORT = parseInt(process.env.PORT || '3100');
 // GIF_SESSION_TTL_SECONDS — deployment-wide hard TTL for governance sessions
@@ -100,6 +101,22 @@ if (identityHmacSecret) {
             `value with 'openssl rand -hex 32' and set it before starting the server.`);
     }
 }
+// GIF_ALLOWED_ORIGINS — Origin header allowlist for the /mcp endpoint (MCP
+// 2026-07-28 Streamable HTTP, Security Warning — DNS-rebinding protection).
+// Parsed once here at startup, same fail-fast contract as
+// GIF_SESSION_TTL_SECONDS and IDENTITY_HMAC_SECRET above: unset or blank
+// means "use the SDK's localhost defaults" (see origin-allowlist.ts for why
+// blank must mean default); a configured value that fails to parse is a
+// misconfiguration to refuse to start on, not a condition to fail closed on
+// per-request.
+const rawAllowedOrigins = process.env[ALLOWED_ORIGINS_ENV];
+const allowedOriginsResult = parseAllowedOrigins(rawAllowedOrigins);
+if (!allowedOriginsResult.ok) {
+    throw new Error(`${ALLOWED_ORIGINS_ENV} ${allowedOriginsResult.problem}. Set a comma-separated ` +
+        `list of hostnames only (no scheme, port, or path) and set it before starting the server.`);
+}
+const allowedOriginHostnames = allowedOriginsResult.hostnames;
+const allowedOriginsConfigured = rawAllowedOrigins !== undefined && rawAllowedOrigins.trim() !== '';
 // ----------------------------------------------------------------------------
 // In-flight call tracking — shutdown drain support.
 // Every audit write is awaited somewhere inside a tools/call handler (the
@@ -292,12 +309,24 @@ const mcpNodeHandler = toNodeHandler(mcpHandler, {
 // ----------------------------------------------------------------------------
 // HTTP server — thin router: /health stays hand-served (independently
 // reverse-proxied in deployments — see
-// docs/runbooks/adopter/production-deployment.md), /mcp delegates to the SDK
-// handler. Host/Origin (DNS-rebinding) validation is deliberately not done
-// here: gif deploys behind a reverse proxy that owns hostname routing (same
-// runbook). Deployments that bind gif directly to a local port should put the
-// SDK's hostHeaderValidationResponse / originValidationResponse helpers in
-// front of the /mcp delegation.
+// docs/runbooks/adopter/production-deployment.md and is NOT Origin-validated
+// below — it is not an MCP connection), /mcp delegates to the SDK handler.
+//
+// Origin validation IS done here: the MCP spec (2026-07-28 Streamable HTTP,
+// Security Warning) requires it — "Servers MUST validate the `Origin` header on
+// all incoming connections to prevent DNS rebinding attacks. If the `Origin`
+// header is present and invalid, servers MUST respond with HTTP 403
+// Forbidden." A rejection here is a transport-level guard in front of MCP
+// parsing and governance evaluation — the same side of the C2.7 boundary as
+// the dispatcher's protocol-level input rejection (GIF-022 §C2.7) — so it
+// emits no audit event.
+//
+// Host-header validation is still NOT done here: gif's documented production
+// shape forwards the original Host through a reverse proxy
+// (docs/runbooks/adopter/production-deployment.md, nginx example
+// `proxy_set_header Host $host`), so a localhost-only Host allowlist here
+// would 403 every proxied request. Deployments that want Host validation can
+// front /mcp with the SDK's hostHeaderValidationResponse helper themselves.
 // ----------------------------------------------------------------------------
 const httpServer = http.createServer((req, res) => {
     console.log(`[server] ${req.method ?? ''} ${req.url ?? ''}`);
@@ -307,6 +336,16 @@ const httpServer = http.createServer((req, res) => {
         return;
     }
     if (req.url === '/mcp') {
+        const originResult = validateOriginHeader(req.headers.origin, allowedOriginHostnames);
+        if (!originResult.ok) {
+            // JSON.stringify keeps the untrusted value from forging log lines; the
+            // slice bounds what one rejected request can add to the log (Node caps
+            // total header size at 16 KiB by default, not at anything log-friendly).
+            console.warn(`[server] Rejected /mcp request — invalid Origin: ${JSON.stringify((req.headers.origin ?? '').slice(0, 200))}`);
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Origin not allowed' }, id: null }));
+            return;
+        }
         mcpNodeHandler(req, res).catch((err) => {
             console.error('[server] Unhandled request error:', err);
             if (!res.headersSent) {
@@ -325,6 +364,7 @@ httpServer.listen(PORT, () => {
     console.log(`[server] MCP:    http://localhost:${String(PORT)}/mcp`);
     console.log(`[server] Tools registered: ${Array.from(TOOL_REGISTRY.keys()).join(', ')}`);
     console.log(`[server] GIF_SESSION_TTL_SECONDS=${String(GIF_SESSION_TTL_SECONDS)}`);
+    console.log(`[server] ${ALLOWED_ORIGINS_ENV}=${allowedOriginHostnames.join(',')}${allowedOriginsConfigured ? '' : ' (default)'}`);
 });
 // ----------------------------------------------------------------------------
 // Shutdown — drain before exit.

@@ -39,7 +39,8 @@ Copy the example file and fill in every value before starting.
 cp .env.example .env
 ```
 
-Required variables — descriptions from `.env.example`:
+Variables — descriptions from `.env.example`. Those with a default of `none`
+are required; the rest may be left at their default:
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -50,6 +51,7 @@ Required variables — descriptions from `.env.example`:
 | `PGPORT_HOST` | Host-side port PostgreSQL is exposed on | `5432` |
 | `PORT` | Host-side port the MCP server listens on | `3100` |
 | `GIF_BIND_ADDR` | Host address both published ports bind to. The default is reachable from this machine only; see the note below before widening it | `127.0.0.1` |
+| `GIF_ALLOWED_ORIGINS` | Hostnames accepted in a browser `Origin` header on `/mcp`. Leave unset unless a browser application calls gif directly — see [`production-deployment.md`](production-deployment.md#2-browser-origins-origin-validation-and-cors) | `localhost`, `127.0.0.1`, `[::1]` |
 | `IDENTITY_HMAC_SECRET` | HMAC secret for identity token signing — must be ≥32 bytes and not the `.env.example` placeholder | none |
 
 Generate a strong `IDENTITY_HMAC_SECRET`:

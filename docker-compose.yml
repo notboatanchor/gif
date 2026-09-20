@@ -63,6 +63,9 @@ services:
       # stop grace is 10s — raising this past ~10 requires raising
       # stop_grace_period with it, or Docker SIGKILLs mid-drain.
       GIF_SHUTDOWN_TIMEOUT_SECONDS: ${GIF_SHUTDOWN_TIMEOUT_SECONDS:-8}
+      # Browser Origin allowlist for /mcp (see .env.example). Empty means the
+      # server's default: localhost, 127.0.0.1, [::1].
+      GIF_ALLOWED_ORIGINS: ${GIF_ALLOWED_ORIGINS:-}
     ports:
       - "${GIF_BIND_ADDR:-127.0.0.1}:${PORT:-3100}:3100"
     depends_on:
