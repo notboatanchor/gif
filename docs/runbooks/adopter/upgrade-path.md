@@ -183,6 +183,32 @@ not affect already-consumed tokens or personas already created.
 
 ---
 
+## Before upgrading past v0.2.3: published ports bind to loopback
+
+This applies only if you run gif from the repository's `docker-compose.yml`.
+Releases after `v0.2.3` publish both Compose ports — the MCP server and
+PostgreSQL — on `127.0.0.1` instead of on every host interface.
+
+**Who is unaffected:** anything that reaches gif from the Docker host itself —
+the commands in these runbooks, the test suite, and a reverse proxy running on
+the same host (`proxy_pass http://localhost:3100`).
+
+**Who must act:** a client on another machine that connects straight to the
+published port, or a tool server running in a container *outside* gif's compose
+project that reaches PostgreSQL through the host's published port (that traffic
+arrives from the Docker bridge, not from loopback). After upgrading, those
+connections are refused. Before upgrading, set `GIF_BIND_ADDR` in `.env` to the
+specific host interface address those callers use, or to `0.0.0.0` for all IPv4
+interfaces — and only once no password in `.env` is still the `.env.example`
+placeholder `changeme`. One narrower difference: the old mapping also published
+on IPv6 (`[::]`); `GIF_BIND_ADDR=0.0.0.0` publishes IPv4 only.
+
+Check what is published after upgrading with `docker compose ps` — the `PORTS`
+column shows `127.0.0.1:` under the default. Details and the reasoning:
+[`production-deployment.md`](production-deployment.md#keep-the-published-ports-on-loopback).
+
+---
+
 ## Before upgrading past v0.2.3: browser callers and `GIF_ALLOWED_ORIGINS`
 
 Releases after `v0.2.3` validate the HTTP `Origin` header on every request to
