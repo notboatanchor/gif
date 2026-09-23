@@ -5,7 +5,7 @@
 
 ## What GIF Is
 
-The Governed Intelligence Framework (GIF) is **AI governance and structural explainability infrastructure**. It enforces authorization before AI tool execution and records every action in an append-only audit trail that is immutable at the persistence layer.
+The Governed Intelligence Framework (GIF) is a **governance runtime for AI tool invocation**. It authorizes every tool call before execution, holds each AI agent to its declared persona scope at the MCP layer, and records every action in an append-only audit trail that is immutable at the persistence layer.
 
 GIF sits between an AI model and the tools it can invoke. It enforces permission boundaries before execution, logs every action in a structurally immutable audit trail, and produces what can accurately be called **structural explainability infrastructure**: when a regulator asks why your AI system accessed a patient record, a financial transaction, or a sensitive document, the answer is not "the model thought it was relevant." The answer is: persona X, created by administrator Y, under delegation chain Z, invoked tool A with parameters B at timestamp C.
 
@@ -40,7 +40,7 @@ GIF was designed to make these questions answerable.
 
 ## Governance Primitives
 
-GIF is **AI governance and structural explainability infrastructure**. It enforces authorization before execution and records every action in an append-only audit trail that is immutable at the persistence layer. Three primitives form the foundation.
+GIF is a **governance runtime for AI tool invocation**: authorization before execution, persona scope enforced at the MCP layer, and an append-only audit trail that is immutable at the persistence layer. Three primitives form the foundation.
 
 ### 1. Personas — Governance Identities for AI Principals
 
