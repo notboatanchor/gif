@@ -2,10 +2,10 @@
 
 ## What This Repository Is
 
-gif is the **Governed Intelligence Framework** — AI governance and structural
-explainability infrastructure. It enforces authorization before AI tool execution
-and records every action in an append-only audit trail that is immutable at the
-persistence layer.
+gif is the **Governed Intelligence Framework** — a governance runtime for AI
+tool invocation. It authorizes every tool call before execution, holds each AI
+agent to its declared persona scope at the MCP layer, and records every action
+in an append-only audit trail that is immutable at the persistence layer.
 
 gif deploys as a containerized MCP server. The enforcement engine is published
 as an importable package (`gif-enforcement`) that adopter tool servers declare
