@@ -77,12 +77,15 @@ chain. A verifier CLI walks the partitions, recomputes every digest, and reports
 mismatches and chain breaks — the trail's integrity is independently checkable,
 not taken on the operator's word.
 
-The canonical record form and its verification procedure are specified in
-[SEP-3004 — Tamper-Evident Audit Record Contract](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3004),
-an MCP Standards-Track proposal (in review), for which GIF is the reference
-implementation. The runnable known-answer vectors ship in this repository under
+The canonical record form and its verification procedure are specified in the
+[Tamper-Evident Audit Record Contract](https://github.com/notboatanchor/audit-record-contract)
+(canonical form `audit-record-contract/1`; originally submitted to MCP as
+[SEP-3004](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3004)),
+for which GIF is the reference implementation. The contract repository is the
+authoritative home for the text and the sealed known-answer values; its vector
+set is mirrored verbatim in this repository under
 [`mcp-server/conformance/audit-record-contract/`](mcp-server/conformance/audit-record-contract/)
-— from `mcp-server/`, `npm run vectors` expects `23 vectors — 23 passed, 0 failed`.
+— from `mcp-server/`, `npm run vectors` expects `26 vectors — 26 passed, 0 failed`.
 
 ---
 
@@ -129,7 +132,7 @@ See [`docs/runbooks/contributor/first-time-setup.md`](docs/runbooks/contributor/
 | [`docs/secrets.md`](docs/secrets.md) | Operators, adopters | Env-var contract, vault reference patterns, rotation procedures |
 | [`docs/runbooks/contributor/`](docs/runbooks/contributor/) | Contributors | First-time setup, schema migrations |
 | [`docs/runbooks/adopter/`](docs/runbooks/adopter/) | Adopters | First-time setup, upgrade path |
-| [`mcp-server/conformance/audit-record-contract/`](mcp-server/conformance/audit-record-contract/) | Implementers, auditors | Canonical audit-record form, hash-chain verification, runnable known-answer vectors (SEP-3004) |
+| [`mcp-server/conformance/audit-record-contract/`](mcp-server/conformance/audit-record-contract/) | Implementers, auditors | Runnable known-answer vectors for the canonical audit-record form and hash-chain verification — a verbatim mirror of [`notboatanchor/audit-record-contract`](https://github.com/notboatanchor/audit-record-contract) `vectors/` |
 
 ---
 

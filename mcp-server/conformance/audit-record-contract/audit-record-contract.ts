@@ -4,17 +4,17 @@
 // Tamper-Evident Audit Record Contract: reference verifier.
 // Vendor-neutral. Implements the machine-checkable surface of the contract:
 // §2.1 core skeleton, §2.2 typed-extension mechanism (the `extensions` keyed
-// object), §2.3 sorted-JSON canonicalization (aligned with PR #2809), §2.4 hash
+// object), §2.3 sorted-JSON canonicalization (aligned with ATSA, MCP PR #2809), §2.4 hash
 // chain, §2.6 verification, and §2.7 the attestation-manifest (the *structured*
 // attestation surface).
 // It does NOT implement storage or append-only ENFORCEMENT — that is attested
 // via the manifest, not wire-observable, per the resolved conformance boundary.
 //
-// canon version: gif-audit/2 (`extensions` keyed object; abstract `outcome`
-// enum; no bare numbers). The sealed two-extension known-answer test lives in
-// the public SEP; gif's live trigger emits a single extension (`d494769c…`) and
-// does not itself reproduce the two-extension digest (migration 015) — the
-// canonicalizer here, over the published preimage, does.
+// canonical_form_version: audit-record-contract/1 (`extensions` keyed object;
+// abstract `outcome` enum; no bare numbers). The sealed two-extension
+// known-answer test lives in the specification (`../spec/audit-record-contract.md`,
+// Conformance); the canonicalizer here reproduces it over the published preimage.
+// The reference implementation (gif) labels the same form `gif-audit/2` internally.
 //
 // Runnable with: `npx tsx run.ts`  or  Node >= 22.6 `node --experimental-strip-types run.ts`.
 
@@ -31,7 +31,7 @@ import { createHash } from 'node:crypto';
 // preimage as the core — so extension fields are integrity-protected by the same
 // chain construction. There is one chain construction, not one per emitter, and
 // a single record can carry MORE THAN ONE extension (caller-governance +
-// runtime-security side by side under one digest — see the public SEP).
+// runtime-security side by side under one digest — see the specification).
 // ---------------------------------------------------------------------------
 
 export interface AuditRecord {
@@ -88,7 +88,7 @@ export const OUTCOMES = ['allowed', 'denied', 'deferred', 'error'] as const;
 // ---------------------------------------------------------------------------
 
 export const PROFILES = {
-  // Worked, fully specified by this SEP (the reference implementation's shape).
+  // Worked, fully specified by this contract (the reference implementation's shape).
   'caller-governance': {
     required: ['purpose_declared'] as const, // declared intent is REQUIRED + chained
     optional: ['session_id', 'invoked_by_principal_id', 'flagged',
@@ -299,7 +299,7 @@ export function verifyChainSegment(records: AuditRecord[]): CheckResult {
 // §2.7 Attestation manifest — the STRUCTURED attestation surface.
 //
 // The append-only enforcement of §2.5 is not wire-observable, but "attested"
-// must not collapse to "trust us" (that cannot clear SEP-2484 Final). A
+// must not collapse to "trust us" (a bare attestation is non-conformant). A
 // conforming implementation publishes a machine-readable manifest declaring the
 // storage mechanism, the chain algorithm, the canonical-form version, and a
 // pointer to a reproducible verification procedure that runs over an exported
@@ -309,7 +309,7 @@ export function verifyChainSegment(records: AuditRecord[]): CheckResult {
 export interface AttestationManifest {
   storage_mechanism: string;      // e.g. revoked-dml-rls | worm | ledger-db | append-only-file
   chain_algorithm: string;        // e.g. sha-256
-  canonical_form_version: string; // e.g. gif-audit/2 (sorted-json, #2809-aligned)
+  canonical_form_version: string; // audit-record-contract/1 for this version of §2.3
   verification_procedure_ref: string; // resolvable pointer to a reproducible verifier
 }
 

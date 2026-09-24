@@ -141,11 +141,15 @@ conformance-vector canonicalizer
 canonical preimages — the hash chain's tamper-evidence is only as trustworthy as
 `emit ≡ verify`. Any change to canonicalization updates all four sites together
 and reproduces the sealed KATs before merge (the same silent-drift hazard as the
-migration apply-paths rule below). The vectors copy is synced verbatim with the
-companion SEP's reference implementation (the authoritative home for the
-contract and its sealed known-answer values) — never forked locally. Never
-backfill or rewrite `canon_version` on existing rows — historical rows verify
-under the version they were stamped with.
+migration apply-paths rule below). The vectors copy is synced verbatim from the
+contract repository's `vectors/` at a tag
+(`https://github.com/notboatanchor/audit-record-contract` — the authoritative
+home for the contract text and its sealed known-answer values; it names the form
+`audit-record-contract/1`) — never forked locally; a finding against a vector is
+routed to that repository, not fixed in the mirror. gif's per-row `canon_version`
+stays `gif-audit/2` — an internal dispatch key for the same form, not a spec
+field. Never backfill or rewrite `canon_version` on existing rows — historical
+rows verify under the version they were stamped with.
 
 **Structural claims about the code cite their source.** Any assertion that the
 code drifts, mismatches, is broken, or that a test vector equals a given digest

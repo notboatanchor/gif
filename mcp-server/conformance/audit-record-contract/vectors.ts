@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Notboatanchor Labs LLC
 //
-// Tamper-Evident Audit Record Contract: conformance vectors (gif-audit/2).
-// Machine-checkable surface (C-REC-1…7), input→expected style, mirroring PR
-// #2809's appendix. The append-only ENFORCEMENT of §2.5 is attested via the
+// Tamper-Evident Audit Record Contract: conformance vectors
+// (canonical_form_version audit-record-contract/1).
+// Machine-checkable surface (C-REC-1…7), input→expected style, mirroring the
+// appendix of ATSA (MCP PR #2809). The append-only ENFORCEMENT of §2.5 is attested via the
 // manifest (C-REC-7), not vector-checkable; the vectors verify its observable
 // CONSEQUENCE (verification fails after an out-of-band mutation, C-REC-4).
 //
 // /2 shape: layer context lives in `extensions` (a keyed object), one entry per
 // registered type id; a single record can carry MORE THAN ONE extension under
-// one digest. The two known-answer tests below are sealed spec-side in the
-// public SEP (the Tamper-Evident Audit Record Contract).
+// one digest. The two known-answer tests below are sealed in the specification
+// (`../spec/audit-record-contract.md`, Conformance).
 
 import {
   type AuditRecord,
@@ -35,8 +36,9 @@ import {
 //   printf '%s' '<canonical preimage>' | sha256sum
 //
 // where the preimage is the sorted-key canonical JSON (see the README / the
-// public SEP for the exact strings). This is the same canonical form PR #2809's clearance
-// assertion uses, so the two record types share one canonicalizer / one matrix.
+// specification for the exact strings). This is the same canonical form ATSA's
+// clearance assertion (MCP PR #2809) uses, so the two record types share one
+// canonicalizer / one matrix.
 // ---------------------------------------------------------------------------
 
 // Single-extension caller-governance KAT (gif's companion vector). Reproduced
@@ -44,7 +46,7 @@ import {
 export const KAT_HASH_CG =
   'd494769c1ae442ea88dd190068747abf63c0568a3b856f85791b1a50a99d48b4';
 // Two-extension KAT — one record carrying BOTH registered extensions side by
-// side under one digest. Sealed spec-side in the public SEP. Reproduced by the
+// side under one digest. Sealed in the specification. Reproduced by the
 // canonicalizer here over the published preimage (and pinned by this vector);
 // gif's live Postgres trigger emits a single extension and does NOT reproduce
 // this two-extension digest (migration 015).
@@ -60,6 +62,21 @@ function seal(base: Omit<AuditRecord, 'event_hash'>): AuditRecord {
   const rec = { ...base } as AuditRecord;
   rec.event_hash = computeEventHash(rec);
   return rec;
+}
+
+// For string-rule negatives (C-REC-2): the record is re-sealed with the
+// verifier's own canonicalizer BEFORE verification, so the only ground for
+// rejection is the normalization rule under test. Sealing the mutated record
+// with the fixture's stale event_hash would reject on hash mismatch even on a
+// verifier that lacks the rule, and the vector would not discriminate.
+function sealOrReject(base: Omit<AuditRecord, 'event_hash'>): CheckResult {
+  let sealed: AuditRecord;
+  try {
+    sealed = seal(base);
+  } catch (e) {
+    return { ok: false, failures: [`rejected at emission: ${(e as Error).message}`] };
+  }
+  return verifyRecordHash(sealed);
 }
 
 // rec1 — the single-extension caller-governance KAT fixture (segment head).
@@ -107,7 +124,7 @@ const GOOD_CHAIN: AuditRecord[] = [rec1, rec2];
 
 // recBoth — the two-extension KAT fixture: ONE record carrying both
 // caller-governance and runtime-security side by side. Matches the sealed
-// preimage in the public SEP exactly → reproduces KAT_HASH_2X. It shares rec1's
+// preimage in the specification exactly → reproduces KAT_HASH_2X. It shares rec1's
 // event_id + caller-governance body
 // by design (gif's single-extension companion IS this record minus the
 // runtime-security entry); they are standalone fixtures, never chained together.
@@ -164,8 +181,8 @@ const clone = (r: AuditRecord): AuditRecord => structuredClone(r);
 const MANIFEST_GOOD: AttestationManifest = {
   storage_mechanism: 'revoked-dml-rls',
   chain_algorithm: 'sha-256',
-  canonical_form_version: 'gif-audit/2',
-  verification_procedure_ref: 'https://github.com/notboatanchor/gif (conformance/)',
+  canonical_form_version: 'audit-record-contract/1',
+  verification_procedure_ref: 'https://github.com/notboatanchor/audit-record-contract/tree/main/vectors',
 };
 
 // ---------------------------------------------------------------------------
@@ -328,7 +345,57 @@ export const VECTORS: Vector[] = [
     evaluate: () => {
       const bad = clone(rec1);
       (bad.extensions['caller-governance'] as Record<string, unknown>).purpose_declared = 'line1\nline2';
-      return verifyRecordHash(bad); // canonicalization throws -> rejected
+      return sealOrReject(bad); // canonicalization throws -> rejected
+    },
+  },
+  {
+    id: 'V-REC2-c1-control',
+    requirement: 'C-REC-2',
+    title: 'a C1 control character (U+0085 NEL) in a protected string field is rejected, not only C0',
+    expect: 'nonconformant',
+    evaluate: () => {
+      // §2.3 rejects the full Cc category (U+0000–U+001F and U+007F–U+009F). A
+      // verifier that screens C0 + DEL only passes V-REC2-control-char and fails
+      // here: U+0085 is a C1 control that survives a C0-only check.
+      const bad = clone(rec1);
+      (bad.extensions['caller-governance'] as Record<string, unknown>).purpose_declared = 'line1\u0085line2';
+      return sealOrReject(bad); // canonicalization throws -> rejected
+    },
+  },
+  {
+    id: 'V-REC2-unpaired-surrogate',
+    requirement: 'C-REC-2',
+    title: 'an unpaired surrogate code unit in a protected string field is rejected (well-formed Unicode only)',
+    expect: 'nonconformant',
+    evaluate: () => {
+      // §2.3: a value carrying an unpaired surrogate makes the record
+      // non-conforming. RFC 8259 §8.2 leaves receiver behavior unpredictable, so
+      // such a value has no single canonical byte form.
+      const bad = clone(rec1);
+      (bad.extensions['caller-governance'] as Record<string, unknown>).purpose_declared = 'lone \uD83D surrogate';
+      return sealOrReject(bad); // canonicalization throws -> rejected
+    },
+  },
+  {
+    id: 'V-REC2-astral-literal',
+    requirement: 'C-REC-2',
+    title: 'a well-formed surrogate pair (astral code point) is accepted and serialized literally, not \\u-escaped',
+    expect: 'conformant',
+    evaluate: () => {
+      // The companion to V-REC2-unpaired-surrogate: the well-formedness rule
+      // rejects unpaired code units, not astral characters. §2.3 also requires
+      // minimal escaping, so U+1F512 appears in the preimage as its UTF-8 bytes,
+      // never as the escape sequence "🔒".
+      const good = clone(rec1);
+      (good.extensions['caller-governance'] as Record<string, unknown>).purpose_declared = 'export \u{1F512} locked';
+      const pre = canonicalPreimage(good);
+      if (!pre.includes('export \u{1F512} locked')) {
+        return { ok: false, failures: ['astral character was not serialized literally'] };
+      }
+      if (/\\u[dD]8/.test(pre)) {
+        return { ok: false, failures: ['astral character was \\u-escaped in the canonical form'] };
+      }
+      return verifyRecordHash(seal(good));
     },
   },
 
