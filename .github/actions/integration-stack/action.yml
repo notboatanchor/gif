@@ -46,13 +46,18 @@ runs:
       shell: bash
       run: docker compose up -d --build
 
+    # The two wait loops below run under `bash -e -o pipefail` (that is what
+    # `shell: bash` means in a composite action). Keep pipelines out of the
+    # `if` conditions: with pipefail, `curl -f … | grep` fails on a 4xx even
+    # when grep matches, and `… | grep -q` can fail on SIGPIPE when grep
+    # exits early.
     - name: Wait for postgres init to complete
       shell: bash
       run: |
-        # init-db.sh applies all migrations on first start; tail logs until
-        # the success line appears or we hit a 60s timeout.
+        # init-db.sh applies all migrations on first start; poll the logs
+        # until the success line appears or we hit a 60s timeout.
         for i in $(seq 1 60); do
-          if docker compose logs postgres 2>&1 | grep -q "GIF Init Complete"; then
+          if [[ "$(docker compose logs postgres 2>&1)" == *"GIF Init Complete"* ]]; then
             echo "postgres init complete"
             exit 0
           fi
@@ -65,9 +70,12 @@ runs:
     - name: Wait for mcp-server to accept connections
       shell: bash
       run: |
+        # GET /mcp answers 405 once the server is up (the endpoint is POST);
+        # any 2xx/4xx means it is listening. "000" = connection refused.
         for i in $(seq 1 30); do
-          if curl -fsS -o /dev/null -w '%{http_code}' http://localhost:3100/mcp 2>&1 | grep -qE '^(2|4)'; then
-            echo "mcp-server is reachable"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3100/mcp 2>/dev/null || true)"
+          if [[ "$code" =~ ^[24] ]]; then
+            echo "mcp-server is reachable (HTTP $code)"
             exit 0
           fi
           sleep 1
