@@ -1,0 +1,21 @@
+# Dependabot version updates — GitHub Actions only.
+#
+# The workflow pins third-party actions to commit SHAs (see
+# .github/workflows/ci.yml). A SHA pin does not move on its own, so this keeps
+# them current: one grouped PR a month at most, and the tag comment next to
+# each SHA is updated with it.
+#
+# npm is deliberately not listed here. Dependabot *security* updates for npm
+# are a repository setting and run without this file; routine npm version
+# bumps stay a deliberate, reviewed change (SDK pins are exact).
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
