@@ -7,6 +7,9 @@
 #   - integration:        full test suite against a fresh docker compose stack
 #   - integration-canary: the same suite on the ubuntu-26.04 runner image;
 #                         allowed to fail, never blocks a merge
+#   - integration-pg18:   the same suite against postgres:18-alpine instead of
+#                         the documented postgres:16-alpine; allowed to fail,
+#                         never blocks a merge
 #
 # fast-checks fails the PR on any obvious source-level issue without spending
 # time on the integration tests. The integration jobs run in parallel.
@@ -126,3 +129,32 @@ jobs:
 
       - name: Build, start the stack, run the suite, tear down
         uses: ./.github/actions/integration-stack
+
+  integration-pg18:
+    name: Integration tests (postgres 18)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Informational for now. PostgreSQL 18 is the distro PostgreSQL of Ubuntu
+    # 26.04, so an adopter on the non-Docker install path meets it before the
+    # 16 the docs describe; this job records whether the same suite passes
+    # there. Promote it to a required check — and add its name to the `main`
+    # ruleset — once it has a track record, by a deliberate change here.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Build, start the stack, run the suite, tear down
+        uses: ./.github/actions/integration-stack
+        with:
+          postgres-image: postgres:18-alpine
+          # The 18+ images keep the cluster under /var/lib/postgresql/<major>/
+          # and refuse a mount at the old /var/lib/postgresql/data.
+          postgres-data-dir: /var/lib/postgresql

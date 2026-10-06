@@ -51,6 +51,8 @@ are required; the rest may be left at their default:
 | `PGPORT_HOST` | Host-side port PostgreSQL is exposed on | `5432` |
 | `PORT` | Host-side port the MCP server listens on | `3100` |
 | `GIF_BIND_ADDR` | Host address both published ports bind to. The default is reachable from this machine only; see the note below before widening it | `127.0.0.1` |
+| `GIF_POSTGRES_IMAGE` | Image for the `postgres` service — the PostgreSQL major version the stack runs. Leave unset for the documented 16; see `.env.example` before changing it | `postgres:16-alpine` |
+| `GIF_POSTGRES_DATA_DIR` | Mount point of the `postgres_data` volume inside the Postgres container. Set to `/var/lib/postgresql` together with an 18+ image; the 18+ images refuse the old path | `/var/lib/postgresql/data` |
 | `GIF_ALLOWED_ORIGINS` | Hostnames accepted in a browser `Origin` header on `/mcp`. Leave unset unless a browser application calls gif directly — see [`production-deployment.md`](production-deployment.md#2-browser-origins-origin-validation-and-cors) | `localhost`, `127.0.0.1`, `[::1]` |
 | `IDENTITY_HMAC_SECRET` | HMAC secret for identity token signing — must be ≥32 bytes and not the `.env.example` placeholder | none |
 
