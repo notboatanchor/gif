@@ -2,9 +2,14 @@
 # gif — integration stack (composite action)
 #
 # Brings up the docker compose stack from a fresh checkout, runs the full
-# integration suite against it, and tears it down. Used by two jobs in
-# .github/workflows/ci.yml — the required "Integration tests" job and the
-# ubuntu-26.04 canary — so the steps exist once and cannot drift between them.
+# integration suite against it, and tears it down. Used by three jobs in
+# .github/workflows/ci.yml — the required "Integration tests" job, the
+# ubuntu-26.04 canary and the postgres-18 leg — so the steps exist once and
+# cannot drift between them.
+#
+# The two inputs select the PostgreSQL image and its data mount point; both
+# default to empty, which leaves the compose defaults (postgres:16-alpine at
+# /var/lib/postgresql/data) in force.
 #
 # The calling job must have run actions/checkout and actions/setup-node first;
 # this action holds only `run` steps on purpose (no `uses:`), so every pinned
@@ -13,6 +18,21 @@
 
 name: Integration stack
 description: Build, start the compose stack, run ./scripts/test-local.sh, tear down.
+
+inputs:
+  postgres-image:
+    description: >-
+      Image for the postgres service (written to .env as GIF_POSTGRES_IMAGE).
+      Empty keeps the compose default, postgres:16-alpine.
+    required: false
+    default: ''
+  postgres-data-dir:
+    description: >-
+      Mount point of the postgres_data volume inside the container (written to
+      .env as GIF_POSTGRES_DATA_DIR). Empty keeps the compose default,
+      /var/lib/postgresql/data. The official 18+ images need /var/lib/postgresql.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -29,6 +49,11 @@ runs:
 
     - name: Create .env from .env.example
       shell: bash
+      # The inputs reach the script through env, not by splicing the
+      # expression into the script body.
+      env:
+        INPUT_POSTGRES_IMAGE: ${{ inputs.postgres-image }}
+        INPUT_POSTGRES_DATA_DIR: ${{ inputs.postgres-data-dir }}
       run: |
         cp .env.example .env
         # Substitute real (random) values for CI. None of these leave the runner.
@@ -40,6 +65,14 @@ runs:
           echo "PGDATABASE=gif"
           echo "PGPORT_HOST=5432"
           echo "PORT=3100"
+          # Only when the calling job selects a PostgreSQL image; otherwise the
+          # compose defaults apply.
+          if [ -n "$INPUT_POSTGRES_IMAGE" ]; then
+            echo "GIF_POSTGRES_IMAGE=$INPUT_POSTGRES_IMAGE"
+          fi
+          if [ -n "$INPUT_POSTGRES_DATA_DIR" ]; then
+            echo "GIF_POSTGRES_DATA_DIR=$INPUT_POSTGRES_DATA_DIR"
+          fi
         } > .env
 
     - name: Start docker compose stack
@@ -66,6 +99,12 @@ runs:
         echo "postgres did not finish init within 60s"
         docker compose logs postgres
         exit 1
+
+    - name: Report PostgreSQL version
+      shell: bash
+      # Evidence in the job log of which server major the suite ran against.
+      # Diagnostic only: it must never be the reason a required check fails.
+      run: docker compose exec -T postgres postgres --version || echo "(version report unavailable)"
 
     - name: Wait for mcp-server to accept connections
       shell: bash

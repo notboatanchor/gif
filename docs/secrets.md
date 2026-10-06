@@ -28,6 +28,8 @@ This decision is recorded in [`decisions/GIF-017-secrets-via-env-vars.md`](../de
 | `PGUSER` | Postgres role for the MCP server | `gif_app` |
 | `PORT` | MCP server HTTP port | `3100` |
 | `GIF_BIND_ADDR` | Host address the two published Compose ports (MCP server and Postgres) bind to | `127.0.0.1` |
+| `GIF_POSTGRES_IMAGE` | Image for the Compose `postgres` service — selects the PostgreSQL major version | `postgres:16-alpine` |
+| `GIF_POSTGRES_DATA_DIR` | Mount point of the `postgres_data` volume inside the Postgres container; the official 18+ images need `/var/lib/postgresql` | `/var/lib/postgresql/data` |
 | `GIF_ALLOWED_ORIGINS` | Hostnames accepted in a browser `Origin` header on `/mcp` — comma-separated, no scheme/port/path; replaces the default when set. Requests with no `Origin` header are always accepted | `localhost`, `127.0.0.1`, `[::1]` |
 | `MCP_BASE_URL` | Base URL for integration tests | derived from `PORT` |
 
