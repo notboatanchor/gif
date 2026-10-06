@@ -52,10 +52,12 @@ docker compose up -d --build
 
 This starts two services:
 
-- **postgres** — PostgreSQL 16, initializes the database on first run
+- **postgres** — PostgreSQL 16, initializes the database on first run. CI also
+  runs the suite against 18; to do the same locally, set `GIF_POSTGRES_IMAGE`
+  and `GIF_POSTGRES_DATA_DIR` as described in `.env.example`.
 - **mcp-server** — the GIF MCP server, waits for postgres to pass its healthcheck before starting
 
-On a fresh volume, `init-db.sh` runs automatically inside the postgres container. It applies all 12 migrations in sequence and records each one in `gif.schema_migrations`.
+On a fresh volume, `init-db.sh` runs automatically inside the postgres container. It applies all 16 migrations in sequence and records each one in `gif.schema_migrations`.
 
 ---
 
@@ -137,6 +139,6 @@ docker compose down -v
 docker compose up -d
 ```
 
-`docker compose down -v` removes the `postgres_data` volume. The next `up` runs `init-db.sh` again against an empty volume, applying all 12 migrations fresh.
+`docker compose down -v` removes the `postgres_data` volume. The next `up` runs `init-db.sh` again against an empty volume, applying all 16 migrations fresh.
 
 This is the canonical way to test a clean install or verify a new migration applies correctly from zero.
