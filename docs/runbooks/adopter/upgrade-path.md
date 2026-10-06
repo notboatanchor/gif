@@ -295,6 +295,73 @@ a mismatched combination is unsupported.
 
 ---
 
+## Changing the PostgreSQL major version
+
+Moving the stack from one PostgreSQL major to another is a PostgreSQL upgrade,
+not a gif upgrade. gif's migrations use only built-in PostgreSQL features and
+apply unchanged on every major the test suite runs (16 as a required check, 18
+as a non-blocking one; the floor is 13 — see the
+[first-time-setup runbook](./first-time-setup.md#1-prerequisites)). gif adds
+no step of its own.
+
+The compose stack selects the image with `GIF_POSTGRES_IMAGE` and the mount
+point of the `postgres_data` volume with `GIF_POSTGRES_DATA_DIR` (both
+documented in `.env.example`). Two facts about the official `postgres` images
+decide how to proceed:
+
+- Images before 18 keep the cluster at `/var/lib/postgresql/data`, the default
+  mount point. The 18+ images keep it under `/var/lib/postgresql/<major>/` and
+  declare `/var/lib/postgresql` as their volume, so an 18+ image needs
+  `GIF_POSTGRES_DATA_DIR=/var/lib/postgresql`. An 18+ image that finds anything
+  mounted at the old path on a fresh start stops with a message explaining the
+  change (docker-library/postgres PR #1259).
+- No image migrates data. An 18+ image that finds a cluster written by an older
+  major in its volume stops without touching it and names the directory. The
+  data is intact; the cluster needs `pg_upgrade` or a dump and restore.
+
+**Development stack, no data to keep:** the fresh-install route, the same
+steps as Path A above. Stop and delete the volume (`docker compose down -v`),
+set the two variables in `.env`, then `docker compose up -d --build`.
+`init-db.sh` applies all 16 migrations on the new major.
+
+**Data to keep:** back up first (top of this runbook). gif documents no tested
+procedure for a data-preserving major-version change — its test suite has not
+exercised one — so the cluster upgrade itself follows the PostgreSQL
+documentation. The two route shapes, and the one constraint specific to gif
+that any route must respect:
+
+- `pg_upgrade` converts the cluster in place and never re-inserts rows. With
+  the official images this needs both majors' binaries in one container;
+  docker-library/postgres issue #37 ("Upgrading between major versions?")
+  collects the container-specific approaches.
+- A dump and restore re-inserts every row. The audit hash-chain trigger
+  (`gif.compute_audit_event_hash`, `BEFORE INSERT` on `gif.audit_events`)
+  fires on every row it sees, re-stamping `canon_version` and recomputing
+  `event_hash`, so the rows must be loaded before the trigger exists. A full
+  `pg_dump` restored into a database that does not yet hold the `gif` schema
+  does that, because `pg_dump` places trigger definitions in its post-data
+  section, after the table data. A *data-only* restore into a schema the
+  migrations have already created rewrites the audit chain and is not a valid
+  route. On the compose stack, `init-db.sh` migrates the fresh volume's
+  database on first start, so that database is not a valid target for a full
+  restore either.
+
+Afterwards run the checks in [After upgrading: verify](#after-upgrading-verify)
+and the read-only chain verifier. It ships built in `mcp-server/dist/`, connects
+with the standard `PG*` variables (default user `gif_app`, default database
+`gif`), and exits non-zero when the chain fails to verify:
+
+```bash
+cd mcp-server
+PGHOST=localhost PGPORT=5432 PGPASSWORD=<GIF_APP_PASSWORD> \
+  node dist/cli/verify_audit_chain.js
+```
+
+The last line must read `RESULT: PASS — chain intact` before the upgraded
+stack goes back into service.
+
+---
+
 ## When a new gif release includes destructive schema changes
 
 gif aims to avoid destructive schema changes after v1.0. The append-only audit

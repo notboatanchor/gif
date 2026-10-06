@@ -13,6 +13,16 @@ database initializes itself on first start. You do not need to run any SQL by ha
 - Git (to clone the repo)
 - A PostgreSQL client (`psql`) — optional, useful for verifying the schema after init
 
+**PostgreSQL versions.** The Docker stack runs PostgreSQL 16, the version gif
+documents and tests as a required CI check. The same integration suite also runs
+against PostgreSQL 18 on every commit as a non-blocking CI check. The schema uses
+only built-in PostgreSQL features; the newest one it depends on is
+`gen_random_uuid()`, which entered core in PostgreSQL 13, so the migrations do not
+apply on releases before 13. Versions other than 16 and 18 are not exercised by
+the test suite. To run the Docker stack on a different major, see
+`GIF_POSTGRES_IMAGE` and `GIF_POSTGRES_DATA_DIR` in `.env.example` and the
+[upgrade runbook](./upgrade-path.md#changing-the-postgresql-major-version).
+
 ---
 
 ## 2. Get the code
@@ -461,6 +471,8 @@ other schemas, follow this path instead.
 **Prerequisites**
 
 1. The database must exist. GIF does not create databases — only schemas within them.
+   It must run PostgreSQL 13 or later; 16 is the version gif tests as a required
+   check and 18 as a non-blocking one (see [Prerequisites](#1-prerequisites)).
 
 2. Run the following as the database superuser or database owner before executing
    the bootstrap. This gives `gif_admin` the right to create the `gif` schema:
