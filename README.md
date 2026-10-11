@@ -85,7 +85,7 @@ for which GIF is the reference implementation. The contract repository is the
 authoritative home for the text and the sealed known-answer values; its vector
 set is mirrored verbatim in this repository under
 [`mcp-server/conformance/audit-record-contract/`](mcp-server/conformance/audit-record-contract/)
-— from `mcp-server/`, `npm run vectors` expects `26 vectors — 26 passed, 0 failed`.
+— from `mcp-server/`, `npm run vectors` expects `30 vectors — 30 passed, 0 failed`.
 
 ---
 

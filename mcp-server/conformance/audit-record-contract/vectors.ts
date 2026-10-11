@@ -385,7 +385,7 @@ export const VECTORS: Vector[] = [
       // The companion to V-REC2-unpaired-surrogate: the well-formedness rule
       // rejects unpaired code units, not astral characters. §2.3 also requires
       // minimal escaping, so U+1F512 appears in the preimage as its UTF-8 bytes,
-      // never as the escape sequence "🔒".
+      // never as the escape sequence "\uD83D\uDD12".
       const good = clone(rec1);
       (good.extensions['caller-governance'] as Record<string, unknown>).purpose_declared = 'export \u{1F512} locked';
       const pre = canonicalPreimage(good);
@@ -414,6 +414,36 @@ export const VECTORS: Vector[] = [
         failures.push(`recBoth (two-extension) KAT mismatch: ${computeEventHash(recBoth)} != ${KAT_HASH_2X}`);
       }
       return { ok: failures.length === 0, failures };
+    },
+  },
+
+  // The KAT above is an accepting case only: a verifier that never computed a
+  // hash would pass it. These two make it fail when it should, against the same
+  // rec1 fixture, so the known answer is pinned in both directions.
+  {
+    id: 'V-REC3-kat-core-altered',
+    requirement: 'C-REC-3',
+    title: 'altering a protected core field breaks the known-answer hash',
+    expect: 'nonconformant',
+    evaluate: () => {
+      const bad = clone(rec1);
+      bad.outcome = 'allowed';                 // 'deferred' in the sealed fixture
+      // The vector returns the KAT check's verdict, as V-REC3-kat does: a
+      // tampered record must no longer satisfy it.
+      return matches(String(computeEventHash(bad)), KAT_HASH_CG,
+        `KAT mismatch after altering outcome: ${computeEventHash(bad)} != ${KAT_HASH_CG}`);
+    },
+  },
+  {
+    id: 'V-REC3-kat-extension-altered',
+    requirement: 'C-REC-3',
+    title: 'altering extension data breaks the known-answer hash, because extensions are in the preimage',
+    expect: 'nonconformant',
+    evaluate: () => {
+      const bad = clone(rec1);
+      (bad.extensions['caller-governance'] as Record<string, unknown>).purpose_declared = 'something else';
+      return matches(String(computeEventHash(bad)), KAT_HASH_CG,
+        `KAT mismatch after altering extension data: ${computeEventHash(bad)} != ${KAT_HASH_CG}`);
     },
   },
 
@@ -484,6 +514,64 @@ export const VECTORS: Vector[] = [
         if (cg?.session_id == null) {
           failures.push(`${et} not linked to a session_id`);
         }
+      }
+      return { ok: failures.length === 0, failures };
+    },
+  },
+
+  // The emission vector above is an accepting case only. These two supply the
+  // rejecting halves of the same two checks it makes: completeness, and the
+  // session link.
+  {
+    id: 'V-REC5-emission-incomplete',
+    requirement: 'C-REC-5',
+    title: 'a sequence missing a declared-required event_type is detected',
+    expect: 'nonconformant',
+    evaluate: () => {
+      const required = ['session_start', 'session_close', 'session_expired', 'session_rejected_closed'];
+      // session_close is never emitted.
+      const emitted: AuditRecord[] = required.filter((et) => et !== 'session_close').map((et, i) => ({
+        event_id: `e${i}`,
+        occurred_at: `2026-06-06T12:01:0${i}.000Z`,
+        principal_id: PRINCIPAL,
+        event_type: et,
+        tool_name: null,
+        outcome: 'recorded',
+        previous_hash: null,
+        event_hash: 'n/a-not-under-test',
+        extensions: { 'caller-governance': { session_id: SID, purpose_declared: 'lifecycle' } },
+      }));
+      const failures: string[] = [];
+      for (const et of required) {
+        if (!emitted.some((r) => r.event_type === et)) {
+          failures.push(`missing required event_type: ${et}`);
+        }
+      }
+      return { ok: failures.length === 0, failures };
+    },
+  },
+  {
+    id: 'V-REC5-emission-unlinked',
+    requirement: 'C-REC-5',
+    title: 'a required event recorded without a session link is detected',
+    expect: 'nonconformant',
+    evaluate: () => {
+      const row: AuditRecord = {
+        event_id: 'e0',
+        occurred_at: '2026-06-06T12:01:00.000Z',
+        principal_id: PRINCIPAL,
+        event_type: 'session_start',
+        tool_name: null,
+        outcome: 'recorded',
+        previous_hash: null,
+        event_hash: 'n/a-not-under-test',
+        // The extension is present, but carries no session_id to link to.
+        extensions: { 'caller-governance': { purpose_declared: 'lifecycle' } },
+      };
+      const failures: string[] = [];
+      const cg = row.extensions['caller-governance'] as Record<string, unknown>;
+      if (cg?.session_id == null) {
+        failures.push(`${row.event_type} not linked to a session_id`);
       }
       return { ok: failures.length === 0, failures };
     },

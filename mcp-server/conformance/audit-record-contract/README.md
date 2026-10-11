@@ -15,7 +15,7 @@ originally submitted to MCP as SEP-3004
 ([modelcontextprotocol#3004](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3004),
 closed 2026-09-22 under a process change; the repository's Appendix A carries the
 origin). The three `.ts` files in this directory are a **verbatim mirror** of that
-repository's `vectors/` at a tag — currently `v1.0.0-draft.1` (commit `105f3e2d`).
+repository's `vectors/` at a tag — currently `v1.0.0` (commit `ddead4dc`).
 Nothing in those three files is edited locally: a finding against a vector is
 routed to the contract repository, and they are re-synced when a new tag is cut.
 This README and `../attestation-manifest.json` are gif's own and are not part of
@@ -24,7 +24,7 @@ at the current tag they are:
 
 ```
 f02e6e9a2b35ab674da933c06e4513fab8d398f8d4d992f9c2b19161fc677b7a  audit-record-contract.ts
-87a84436bde36f7391bf5d14c8ac98d59ff5fceec6d91ef9831fa812beab6602  vectors.ts
+6f732711cea592cae3ef2a8da5ae0baa189201a2d939afb3a35c3523f53e9807  vectors.ts
 e41f63f942c7b0128f3a1015fe16144b4a847a2dfa8923a49891f8659b135be4  run.ts
 ```
 
@@ -44,7 +44,7 @@ naming the same form; new manifests declare `audit-record-contract/1`.
 | File | Role |
 |------|------|
 | `audit-record-contract.ts` | Reference verifier — core skeleton + typed-extension mechanism (`extensions` keyed object), sorted-JSON canonicalization (NFC/trim/length-cap/no-control-chars/well-formed-Unicode), SHA-256 hash chain, verification, and the attestation-manifest validator. No storage / no append-only enforcement (that is attested). |
-| `vectors.ts` | Conformance vectors C-REC-1…7, input→expected style. Includes **two fixed known-answer tests** (single-extension + two-extension) for cross-implementation hash interop. The C-REC-2 string-rule negatives re-seal the mutated record with the verifier's own canonicalizer before verifying, so the only ground for rejection is the rule under test. |
+| `vectors.ts` | Conformance vectors C-REC-1…7, input→expected style. Includes **two fixed known-answer tests** (single-extension + two-extension) for cross-implementation hash interop. The C-REC-2 string-rule negatives re-seal the mutated record with the verifier's own canonicalizer before verifying, so the only ground for rejection is the rule under test. Four rejecting vectors added at `v1.0.0` (`V-REC3-kat-core-altered`, `V-REC3-kat-extension-altered`, `V-REC5-emission-incomplete`, `V-REC5-emission-unlinked`) pin the known-answer test and the emission check in the failing direction as well. |
 | `run.ts` | Zero-dependency runner. |
 | `../attestation-manifest.json` | gif's own instance attestation (§2.7) — declares `canonical_form_version: audit-record-contract/1`. Not part of the mirror. |
 
@@ -58,7 +58,7 @@ npm run vectors
 npx tsx run.ts
 ```
 
-Expected: `26 vectors — 26 passed, 0 failed`.
+Expected: `30 vectors — 30 passed, 0 failed`.
 
 ## The architecture (load-bearing)
 
@@ -139,7 +139,7 @@ and reproduces it from the rule, per the KAT-ownership decision.
 
 These vectors are the runnable conformance artifact the specification's
 Reference Implementation and Conformance sections link to: clone either
-repository, run one command, see `26 vectors — 26 passed, 0 failed`. The
+repository, run one command, see `30 vectors — 30 passed, 0 failed`. The
 specification carries the authoritative contract text and the sealed
 known-answer values; this suite proves they run, and gif's audit trigger,
 verifier core, and test replicas are held byte-identical to the canonicalizer
