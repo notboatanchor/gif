@@ -32,9 +32,9 @@ in any environment that handles real audit data.
 
 ```bash
 # HTTPS (no SSH key required):
-git clone --branch v0.2.4 https://github.com/notboatanchor/gif.git
+git clone --branch v0.2.5 https://github.com/notboatanchor/gif.git
 # Or SSH:
-# git clone --branch v0.2.4 git@github.com:notboatanchor/gif.git
+# git clone --branch v0.2.5 git@github.com:notboatanchor/gif.git
 
 cd gif
 ```
@@ -160,21 +160,23 @@ Expected response: `{"status":"ok","service":"gif-mcp-server"}`
 In your adopter tool server, add `gif-enforcement` as a pinned git dependency:
 
 ```bash
-npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.4"
+npm install "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.5"
 ```
 
 This adds the following to your `package.json`:
 
 ```json
 "dependencies": {
-  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.4"
+  "gif-enforcement": "git+ssh://git@github.com/notboatanchor/gif.git#v0.2.5"
 }
 ```
 
-The v0.2 substrate uses the MCP SDK 2.0 split-package layout (on the RC
-tags the SDK prereleases are ESM-only — your consuming package needs
-`"type": "module"`; SDK `2.0.0` final, the `v0.2.0` substrate, also ships
-CJS entry points) and requires an explicit
+The v0.2 substrate uses the MCP SDK 2.x split-package layout (current tags
+pin `@modelcontextprotocol/server` 2.4.0 and `/node` 2.1.2 exactly; if your
+tool server declares either package itself, declare the same versions —
+`/node` 2.1.2 requires `server` `^2.4.0` as a peer, so they move together;
+the retired RC tags were ESM-only, while `2.0.0` and later also ship CJS
+entry points) and requires an explicit
 `gif_session_id` argument on every governed tool call. See
 [`docs/migrations/v0.1-to-v0.2.md`](../../migrations/v0.1-to-v0.2.md) for the
 full adopter contract — package.json changes, ESM requirement, session-handle
