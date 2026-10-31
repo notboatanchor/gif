@@ -268,13 +268,15 @@ instead of `node:22-alpine`. Three things to check:
    `/node` rather than an optional peer; nothing to declare. A tool server
    that only imports `gif-enforcement` and never declares the SDK itself needs
    no change.
-2. **The SDK now caps request bodies and batches.** From SDK 2.1.0 the
-   handler rejects a request body over 4 MiB with HTTP 413 and a JSON-RPC
-   batch over 100 messages with HTTP 400, before any MCP parsing. These are
-   transport-level rejections ahead of governance evaluation, so no audit
-   event is written — the same side of the GIF-022 §C2.7 boundary as the
-   `Origin` guard. Only a deployment that sends a single tool call over 4 MiB
-   notices. The reverse proxy remains the tuned limit (see
+2. **The SDK now caps request bodies and batches.** From SDK 2.1.0 (the fix
+   for GHSA-f897-62hf-6gxq) the handler rejects a request body over 4 MiB
+   with HTTP 413 before any MCP parsing, and — for 2025-era clients served
+   through the SDK's stateless fallback — a JSON-RPC batch over 100 messages
+   with HTTP 400 before any message is dispatched. Both are transport-level
+   rejections ahead of governance evaluation, so no audit event is written —
+   the same side of the GIF-022 §C2.7 boundary as the `Origin` guard. Only a
+   deployment that sends a single tool call over 4 MiB, or a batch of more
+   than 100 messages, notices. The reverse proxy remains the tuned limit (see
    [`production-deployment.md`](production-deployment.md)); gif does not
    expose a setting for the SDK's cap.
 3. **The server image runs Node 26.** Building the image from a tag after

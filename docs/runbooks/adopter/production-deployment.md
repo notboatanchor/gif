@@ -166,10 +166,11 @@ GIF does not implement rate limiting. Add it at the reverse proxy layer.
   `persona_id` prevents a compromised persona from generating unbounded
   audit volume
 - Request-body size: GIF does not cap request-body size. The MCP SDK gif
-  builds on rejects bodies over 4 MiB (HTTP 413) and JSON-RPC batches over
-  100 messages by default, before any MCP parsing — a backstop, not a tuned
-  limit. Set `client_max_body_size` (nginx) or your proxy's equivalent as
-  the primary control; the example below uses `1m`
+  builds on rejects bodies over 4 MiB (HTTP 413, before any MCP parsing)
+  and JSON-RPC batches over 100 messages (HTTP 400, before any message is
+  dispatched) by default — a backstop, not a tuned limit. Set
+  `client_max_body_size` (nginx) or your proxy's equivalent as the primary
+  control; the example below uses `1m`
 - Concurrent connections: pair the request-rate limit with a per-IP
   concurrent-connection cap (`limit_conn`) so long-lived streaming
   connections cannot pin sockets; request-rate limits alone do not bound
