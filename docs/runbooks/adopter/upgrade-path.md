@@ -251,6 +251,50 @@ Details:
 
 ---
 
+## Before upgrading past v0.2.4: SDK pins, request-body cap, Node 26
+
+Releases after `v0.2.4` move the MCP SDK from `2.0.0` to
+`@modelcontextprotocol/server` 2.4.0 and `@modelcontextprotocol/node` 2.1.2
+(exact pins in `package.json`) and build the server image on `node:26-alpine`
+instead of `node:22-alpine`. Three things to check:
+
+1. **If your tool server declares the SDK packages itself, move them with
+   gif.** `gif-enforcement` declares `@modelcontextprotocol/server` 2.4.0 and
+   `@modelcontextprotocol/node` 2.1.2 exactly. `/node` 2.1.2 requires `server`
+   `^2.4.0` as a peer dependency, so a tool server that still declares
+   `server` `2.0.0` directly fails `npm install` with an `ERESOLVE` peer
+   conflict. Either declare the same two versions or drop your direct
+   declaration and inherit gif's. `hono` is now a regular dependency of
+   `/node` rather than an optional peer; nothing to declare. A tool server
+   that only imports `gif-enforcement` and never declares the SDK itself needs
+   no change.
+2. **The SDK now caps request bodies and batches.** From SDK 2.1.0 (the fix
+   for GHSA-f897-62hf-6gxq) the handler rejects a request body over 4 MiB
+   with HTTP 413 before any MCP parsing, and — for 2025-era clients served
+   through the SDK's stateless fallback — a JSON-RPC batch over 100 messages
+   with HTTP 400 before any message is dispatched. Both are transport-level
+   rejections ahead of governance evaluation, so no audit event is written —
+   the same side of the GIF-022 §C2.7 boundary as the `Origin` guard. Only a
+   deployment that sends a single tool call over 4 MiB, or a batch of more
+   than 100 messages, notices. The reverse proxy remains the tuned limit (see
+   [`production-deployment.md`](production-deployment.md)); gif does not
+   expose a setting for the SDK's cap.
+3. **The server image runs Node 26.** Building the image from a tag after
+   `v0.2.4` produces a `node:26-alpine` container (Node 22 security support
+   ends 2027-04-30). `engines.node` in `gif-enforcement` stays `>=22`, so a
+   tool server on Node 22 installs and runs it unchanged. A persona-bootstrap
+   script piped into the container keeps working: `@modelcontextprotocol/client`
+   and `pg` both import inside the Node 26 image.
+
+These releases close seven production advisories against the previous pins:
+GHSA-jm63-cq47-j5jp, GHSA-46jr-4wx8-v453, GHSA-rvq5-wwqv-78pq and
+GHSA-f897-62hf-6gxq (`@modelcontextprotocol/server` / `/node`),
+GHSA-mrhx-c7xc-m3w5 (`zod`), GHSA-5r4p-p66f-jhc7 (`hono`) and
+GHSA-rmxm-3fg6-px4f (`@hono/node-server`). No tool schema, exported symbol,
+database schema, or migration changed.
+
+---
+
 ## After upgrading: verify
 
 Confirm the new migrations are recorded:
