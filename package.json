@@ -16,8 +16,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0",
-    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@modelcontextprotocol/node": "2.1.2",
     "pg": "^8.11.3"
   }
 }
