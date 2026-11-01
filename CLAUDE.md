@@ -106,7 +106,10 @@ the original `Host` through a reverse proxy
 would `403` every proxied request. Request-body size and rate limits are also
 the proxy's job. A security finding that reads "no Host validation" or "no
 body cap" is answered by that runbook, not by a code change; changing the
-split is an owner decision.
+split is an owner decision. Since `v0.2.5` the MCP SDK itself rejects bodies
+over 4 MiB (`413`) and JSON-RPC batches over 100 messages (`400`) by default —
+a backstop, not a tuned limit, and still no audit event; the runbook states
+this, and gif adds no cap of its own.
 
 **Dispatcher does not auto-close sessions.** Session closure is caller-driven
 (`session_close` tool) or TTL-driven (`GIF_SESSION_TTL_SECONDS`, default
@@ -177,6 +180,27 @@ citing from recall. A published advisory was cited from recall as precedent
 for a similar action; re-reading `SECURITY.md` showed the advisory rested on
 a condition that did not transfer, and the precedent was withdrawn.
 
+**Where each constraint is checked.** Every harness below runs on each push
+(`.github/workflows/ci.yml`; locally via `./scripts/test-local.sh` against
+gif's own compose stack). A constraint whose check is "manual" or "process" is
+exactly as strong as the people following it — treat a missing check as a
+finding to close, not as a weaker rule.
+
+| Constraint | Check |
+|---|---|
+| Audit trail append-only | `mcp-server/test_audit_trail.mjs` — UPDATE/DELETE as `gif_app` must fail |
+| `identity_token` mandatory at `persona_create` | `mcp-server/conformance/c6_identity_gates.mjs`, `mcp-server/test_identity_binding.mjs` |
+| `personas` gated behind `admin_read` | `c6_identity_gates.mjs`, `c4_audit_emission.mjs` |
+| `governance_review_status` allowlist | `c2_dispatch_validation.mjs`, `c6_identity_gates.mjs` |
+| `gif_session_id` required; protocol-vs-governance rejection boundary | `c2_dispatch_validation.mjs`, `mcp-server/test_session_dispatch.mjs` |
+| `Origin` validation — `403`, no audit event | `mcp-server/test_origin_validation.mjs` |
+| No dispatcher auto-close; TTL and closure precedence via `validateSessionHandle` | `c3_closure.mjs`, `mcp-server/test_session_lifecycle.mjs` |
+| Canonical form byte-identical across the four implementations | CI step "Audit record contract vectors" (`npm run vectors`, 30/30), `mcp-server/test_verify_core.mjs`, `mcp-server/test_hash_chain.mjs` |
+| Caller-supplied SQL identifiers escaped | `mcp-server/test_sql_injection.mjs` |
+| `dist/` tracked and in sync with `src/` | CI step "dist/ in sync with src/" |
+| Migration wired into both apply-paths | **Manual** — CI exercises only `ops/docker/init-db.sh`; a parity check between the two scripts is a planned CI follow-up |
+| Review-before-merge gate; structural-, priority- and precedent-claim rules | **Process** — PR review and the periodic documentation audit, not CI |
+
 ---
 
 ## Compliance Hardening Roadmap
@@ -221,7 +245,8 @@ Contributors using Claude Code get them automatically.
 | `postgres-patterns` | PostgreSQL patterns for gif's persistence layer |
 
 Build/type/lint/test verification before committing is handled by the global
-`verification-loop` skill in Claude Code, which detects gif's stack and runs
+`verify` skill in Claude Code (because it is named `verify`, Claude Code runs
+it before each non-docs, non-tests commit), which detects gif's stack and runs
 the canonical sequence automatically — no project-local copy needed.
 
 ---
