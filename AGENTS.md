@@ -31,3 +31,10 @@ of you:
    unverified, or low-effort AI-generated submissions are closed without review.
 5. **Never report a suspected vulnerability in a public issue.** Follow
    [`SECURITY.md`](SECURITY.md).
+
+## Feature map
+
+`docs/feature-map.md` lists each feature with its MCP tools, HTTP routes, services, data, settings, tests, who can use it, a Verify line and known traps. Read it before you search the code. Format and rules: `_planning/feature-map-format.md`.
+
+- Before you mark a work item done, run the `docs-sync` skill (`.claude/skills/docs-sync/`). Its feature map steps add your change to the map. Then `python3 scripts/check_feature_map.py` must exit 0.
+- When you find a wrong path in the map, fix it in the same commit.
