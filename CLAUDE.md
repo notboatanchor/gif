@@ -243,6 +243,8 @@ Contributors using Claude Code get them automatically.
 | `database-migrations` | Safe migration patterns for gif's schema layer |
 | `mcp-server-patterns` | Canonical MCP patterns for gif's tool interface |
 | `postgres-patterns` | PostgreSQL patterns for gif's persistence layer |
+| `docs-sync` | Keep `docs/feature-map.md` and the orientation docs current; run before marking a work item done |
+| `prime-update` | End-of-session update; runs `docs-sync` and gates on `python3 scripts/check_feature_map.py` |
 
 Build/type/lint/test verification before committing is handled by the global
 `verify` skill in Claude Code (because it is named `verify`, Claude Code runs
